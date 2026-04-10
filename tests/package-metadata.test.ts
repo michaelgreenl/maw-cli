@@ -15,9 +15,9 @@ describe("package metadata", () => {
     expect(packageJson.main).toBe("./dist/index.js");
     expect(packageJson.types).toBe("./dist/index.d.ts");
     expect(packageJson.bin).toEqual({
-      maw: "./dist/index.js",
+      maw: "./bin/maw.js",
     });
-    expect(packageJson.files).toEqual(["dist", "README.md"]);
+    expect(packageJson.files).toEqual(["bin", "dist", "README.md"]);
     expect(packageJson.exports).toEqual({
       ".": {
         import: "./dist/index.js",
@@ -25,5 +25,9 @@ describe("package metadata", () => {
       },
       "./package.json": "./package.json",
     });
+  });
+
+  it("ships prebuilt output without a consumer prepare hook", () => {
+    expect(packageJson.scripts).not.toHaveProperty("prepare");
   });
 });

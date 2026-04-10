@@ -7,7 +7,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "maw": "./dist/index.js"
+    "maw": "./bin/maw.js"
   },
   "exports": {
     ".": {
@@ -17,14 +17,14 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "bin",
     "dist",
     "README.md"
   ],
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
-    "test": "vitest run",
-    "prepare": "bun run build"
+    "test": "vitest run"
   },
   "devDependencies": {
     "@tsconfig/recommended": "^1.0.13",
