@@ -7,16 +7,16 @@ const testDir = dirname(fileURLToPath(import.meta.url));
 const root = resolve(testDir, "..");
 
 describe("installed bin wrapper", () => {
-  it("runs the placeholder init command", () => {
+  it("prints help through the built entrypoint", () => {
     const res = spawnSync(
       process.execPath,
-      [resolve(root, "bin/maw.js"), "init"],
+      [resolve(root, "bin/maw.js"), "--help"],
       {
         encoding: "utf8",
       },
     );
 
-    expect(res.status).toBe(1);
-    expect(res.stderr).toContain("maw init is not implemented yet.");
+    expect(res.status).toBe(0);
+    expect(res.stdout).toContain("Usage: maw <command>");
   });
 });
