@@ -1,5 +1,5 @@
 {
-    "name": "maw",
+    "name": "maw-cli",
     "version": "0.0.1",
     "description": "CLI for scaffolding and running MAW workflows.",
     "packageManager": "bun@1.3.9",
@@ -7,7 +7,7 @@
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "bin": {
-        "maw": "./bin/maw.js"
+        "maw-cli": "./bin/maw-cli.js"
     },
     "exports": {
         ".": {

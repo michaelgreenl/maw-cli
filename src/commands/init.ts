@@ -24,7 +24,7 @@ interface WorkflowModule {
 
 const PACKAGE_JSON = 'package.json';
 const SCAFFOLD_EXPORT = './scaffold';
-const IGNORED_PACKAGE = 'maw';
+const IGNORED_PACKAGE = 'maw-cli';
 
 const dependencyFields = ['dependencies', 'devDependencies', 'optionalDependencies'] as const;
 

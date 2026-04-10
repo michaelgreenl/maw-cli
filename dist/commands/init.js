@@ -1,118 +1,129 @@
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
-import { pathToFileURL } from "node:url";
-const exists = async (file) => {
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+const PACKAGE_JSON = 'package.json';
+const SCAFFOLD_EXPORT = './scaffold';
+const IGNORED_PACKAGE = 'maw-cli';
+const dependencyFields = ['dependencies', 'devDependencies', 'optionalDependencies'];
+const fileExists = async (filePath) => {
     try {
-        await access(file);
+        await access(filePath);
         return true;
     }
     catch {
         return false;
     }
 };
-const readPackage = async (root) => {
-    const file = join(root, "package.json");
-    const text = await readFile(file, "utf8");
-    return JSON.parse(text);
+const readJson = async (filePath) => {
+    const content = await readFile(filePath, 'utf8');
+    return JSON.parse(content);
 };
-const candidateNames = (pkg) => {
+const readPackageJson = (root) => {
+    return readJson(join(root, PACKAGE_JSON));
+};
+const getInstalledDependencyNames = (pkg) => {
     const names = new Set();
-    for (const deps of [
-        pkg.dependencies ?? {},
-        pkg.devDependencies ?? {},
-        pkg.optionalDependencies ?? {},
-    ]) {
+    for (const field of dependencyFields) {
+        const deps = pkg[field] ?? {};
         for (const name of Object.keys(deps)) {
-            if (name !== "maw") {
+            if (name !== IGNORED_PACKAGE) {
                 names.add(name);
             }
         }
     }
     return [...names];
 };
-const loadWorkflow = async (root) => {
-    const pkg = await readPackage(root);
-    const require = createRequire(join(root, "package.json"));
-    const matches = [];
-    for (const name of candidateNames(pkg)) {
-        try {
-            const manifest = require.resolve(`${name}/package.json`);
-            const dir = dirname(manifest);
-            const meta = JSON.parse(await readFile(manifest, "utf8"));
-            const entry = meta.exports?.["./scaffold"];
-            const next = typeof entry === "string"
-                ? entry
-                : entry && typeof entry === "object"
-                    ? typeof entry.import === "string"
-                        ? entry.import
-                        : typeof entry.default === "string"
-                            ? entry.default
-                            : typeof entry.require === "string"
-                                ? entry.require
-                                : undefined
-                    : undefined;
-            if (!next) {
-                continue;
-            }
-            const file = join(dir, next);
-            const mod = (await import(pathToFileURL(file).href));
-            if (mod.scaffold && typeof mod.createScaffoldFiles === "function") {
-                matches.push(mod);
-            }
-        }
-        catch {
-            // Ignore packages that are not workflow packages.
-        }
+const resolveScaffoldExport = (exportsField) => {
+    const entry = exportsField?.[SCAFFOLD_EXPORT];
+    if (typeof entry === 'string') {
+        return entry;
     }
+    if (!entry || typeof entry !== 'object') {
+        return undefined;
+    }
+    const conditions = entry;
+    if (typeof conditions.import === 'string') {
+        return conditions.import;
+    }
+    if (typeof conditions.default === 'string') {
+        return conditions.default;
+    }
+    if (typeof conditions.require === 'string') {
+        return conditions.require;
+    }
+    return undefined;
+};
+const isWorkflowModule = (value) => Boolean(value.scaffold) && typeof value.createScaffoldFiles === 'function';
+const tryLoadWorkflowModule = async (requireFromRoot, packageName) => {
+    try {
+        const manifestPath = requireFromRoot.resolve(`${packageName}/${PACKAGE_JSON}`);
+        const packageDir = dirname(manifestPath);
+        const manifest = await readJson(manifestPath);
+        const scaffoldExport = resolveScaffoldExport(manifest.exports);
+        if (!scaffoldExport) {
+            return null;
+        }
+        const modulePath = join(packageDir, scaffoldExport);
+        const loaded = (await import(pathToFileURL(modulePath).href));
+        return isWorkflowModule(loaded) ? loaded : null;
+    }
+    catch {
+        return null;
+    }
+};
+const loadWorkflow = async (root) => {
+    const pkg = await readPackageJson(root);
+    const requireFromRoot = createRequire(join(root, PACKAGE_JSON));
+    const dependencyNames = getInstalledDependencyNames(pkg);
+    const matches = (await Promise.all(dependencyNames.map((name) => tryLoadWorkflowModule(requireFromRoot, name)))).filter((mod) => mod !== null);
     if (matches.length === 1) {
         return matches[0];
     }
     if (matches.length === 0) {
-        throw new Error("No installed workflow package exposes the MAW scaffold contract.");
+        throw new Error('No installed workflow package exposes the MAW scaffold contract.');
     }
-    throw new Error("Multiple installed workflow packages expose the MAW scaffold contract.");
+    throw new Error('Multiple installed workflow packages expose the MAW scaffold contract.');
 };
 const mergeGitignore = async (root, entries) => {
-    const file = join(root, ".gitignore");
-    const text = (await exists(file)) ? await readFile(file, "utf8") : "";
-    const lines = text.split("\n").filter((line) => line.length > 0);
+    const gitignorePath = join(root, '.gitignore');
+    const existing = (await fileExists(gitignorePath)) ? await readFile(gitignorePath, 'utf8') : '';
+    const lines = new Set(existing.split('\n').filter(Boolean));
     for (const entry of entries) {
-        if (!lines.includes(entry)) {
-            lines.push(entry);
-        }
+        lines.add(entry);
     }
-    await writeFile(file, `${lines.join("\n")}\n`);
+    await writeFile(gitignorePath, `${[...lines].join('\n')}\n`);
 };
-const writeMissing = async (root, files) => {
-    for (const [rel, content] of Object.entries(files)) {
-        const file = join(root, rel);
-        if (await exists(file)) {
+const writeMissingFiles = async (root, files) => {
+    for (const [relativePath, content] of Object.entries(files)) {
+        const filePath = join(root, relativePath);
+        if (await fileExists(filePath)) {
             continue;
         }
-        await mkdir(dirname(file), { recursive: true });
-        await writeFile(file, content);
+        await mkdir(dirname(filePath), { recursive: true });
+        await writeFile(filePath, content);
     }
 };
 export const runInit = async (_args, root = process.cwd()) => {
     try {
-        const mod = await loadWorkflow(root);
-        for (const dir of mod.scaffold.directories) {
-            await mkdir(join(root, dir), { recursive: true });
+        const workflow = await loadWorkflow(root);
+        for (const directory of workflow.scaffold.directories) {
+            await mkdir(join(root, directory), { recursive: true });
         }
-        await writeMissing(root, await mod.createScaffoldFiles(mod.scaffold.packageName));
-        await mergeGitignore(root, mod.scaffold.gitignore);
-        process.stdout.write(`Initialized .maw scaffold using ${mod.scaffold.packageName}.\n`);
+        const scaffoldFiles = await workflow.createScaffoldFiles(workflow.scaffold.packageName);
+        await writeMissingFiles(root, scaffoldFiles);
+        await mergeGitignore(root, workflow.scaffold.gitignore);
+        process.stdout.write(`Initialized .maw scaffold using ${workflow.scaffold.packageName}.\n`);
         return 0;
     }
-    catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
         process.stderr.write(`${message}\n`);
         return 1;
     }
 };
 export const initCommand = {
-    name: "init",
-    summary: "Scaffold .maw/ config in target project",
-    run: (args) => runInit(args),
+    name: 'init',
+    summary: 'Scaffold .maw/ config in target project',
+    run: runInit,
 };
