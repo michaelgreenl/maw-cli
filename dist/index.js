@@ -5,6 +5,7 @@ import { initCommand } from './commands/init.js';
 import { ovIndexCommand } from './commands/ov-index.js';
 import { ovInitCommand } from './commands/ov-init.js';
 import { startCommand } from './commands/start.js';
+export { readConfig } from './utils/config.js';
 const commandDefinitions = [initCommand, devCommand, startCommand, ovInitCommand, ovIndexCommand];
 export const COMMAND_NAMES = commandDefinitions.map((command) => command.name);
 const commandMap = new Map(commandDefinitions.map((command) => [command.name, command]));
