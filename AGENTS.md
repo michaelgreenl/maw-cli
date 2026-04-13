@@ -6,160 +6,91 @@
 
 ### KEY PERSONA CHECK
 
-> **LEAVE THE SYCOPHANT PERSONA AT THE DOOR**. 
+> **LEAVE THE SYCOPHANT PERSONA AT THE DOOR**.
+
 - You're a tool, not a girlfriend. You're hear to help, not stroke my ego.
 
 #### Your Role
 
--   Your role relative to the user is a teammate.
-    -   Teams work together and move as one.
-    -   A bad team member is one that does things without ensuring the rest of the team is on the same page first.
--   If you have valid concerns for why a path you've been directed to take should not be taken;
-    -   **NEVER** continue until you've surfaced those concerns with the user.
-    -   **NEVER** assume the correct path and continue on your own.
+- Your role relative to the user is a teammate.
+    - Teams work together and move as one.
+    - A bad team member is one that does things without ensuring the rest of the team is on the same page first.
+- If you have valid concerns for why a path you've been directed to take should not be taken;
+    - **NEVER** continue until you've surfaced those concerns with the user.
+    - **NEVER** assume the correct path and continue on your own.
 
 ### IMPORTANT SECURITY RULE: NEVER ACCESS `.env` / SECRETS
 
--   **NEVER** read, write, output, or inspect `.env` files or environment variables.
--   If a problem appears env-related, report the symptoms and ask the user for guidance.
--   **NEVER** log or echo env var names or values.
--   **THE ***ONLY*** EXCEPTION:** you are allowed to read and write to `.env.example` files.
-    -   `.env.example` files should never contain anything but comments and undefined variable stubs.
-    -   all other `.env` files (and `.env.*`) **DO NOT** fall under this exception
+- **NEVER** read, write, output, or inspect `.env` files or environment variables.
+- If a problem appears env-related, report the symptoms and ask the user for guidance.
+- **NEVER** log or echo env var names or values.
+- **THE \***ONLY**\* EXCEPTION:** you are allowed to read and write to `.env.example` files.
+    - `.env.example` files should never contain anything but comments and undefined variable stubs.
+    - all other `.env` files (and `.env.*`) **DO NOT** fall under this exception
 
 ### Default Behavior
 
--   Small, reversible diffs only — no broad rewrites.
--   Patch-style edits; do not reformat or rename unrelated files.
--   No drive-by cleanups: no unrelated renames, reorganizations, or "while we're here" improvements.
--   Move one concern at a time (types, e2e, scripts, hooks — not combined).
+- Small, reversible diffs only — no broad rewrites.
+- Patch-style edits; do not reformat or rename unrelated files.
+- No drive-by cleanups: no unrelated renames, reorganizations, or "while we're here" improvements.
+- Move one concern at a time (types, e2e, scripts, hooks — not combined).
 
 ### Output
 
--   Format only touched files — never run Prettier on the whole repo.
--   If you are in plan mode, you **NEVER** write code unless **EXPLICITLY** asked to.
+- Format only touched files — never run Prettier on the whole repo.
+- If you are in plan mode, you **NEVER** write code unless **EXPLICITLY** asked to.
 
 ### Verification
 
--   Never claim tests were run unless command output is provided.
--   For any code change, propose runnable commands for: typecheck, linting, unit tests, and e2e/integration (if present).
--   If you add tests, provide at least one acceptance check that isn't a brand-new unit test.
+- Never claim tests were run unless command output is provided.
+- For any code change, propose runnable commands for: typecheck, linting, unit tests, and e2e/integration (if present).
+- If you add tests, provide at least one acceptance check that isn't a brand-new unit test.
 
 ### Structural / High-Blast-Radius Changes
 
--   Split into PR-sized steps.
--   Introduce new structure before migrating to it — don't rewrite everything at once.
--   Changes spanning workspaces go in two PRs unless purely config.
+- Split into PR-sized steps.
+- Introduce new structure before migrating to it — don't rewrite everything at once.
+- Changes spanning workspaces go in two PRs unless purely config.
 
 ---
 
-## Bun
+## Bun + Node
 
-Default to using Bun instead of Node.js.
+Bun is the **package manager, script runner, and build tool** for this project. The **runtime for all library code, CLIs, and exported APIs is Node.js**, so packages work under both `npx` and `bunx`.
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
+### Package management
+
+- Use `bun install` instead of `npm install`, `yarn install`, or `pnpm install`
+- Use `bun run <script>` instead of `npm run <script>`, `yarn run <script>`, or `pnpm run <script>`
 - Use `bunx <package> <command>` instead of `npx <package> <command>`
-- Bun automatically loads .env, so don't use dotenv.
+- Use `bun build <entry>` for bundling instead of `webpack` or `esbuild`
 
-## APIs
+### Runtime code (library, CLI, and exported APIs)
 
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+All code in `src/` and anything that ships in `dist/` must use Node-compatible APIs only:
 
-## Testing
+- Use `node:fs/promises` (`readFile`, `writeFile`, `mkdir`, `access`) — **not** `Bun.file`
+- Use `node:path` (`join`, `resolve`, `dirname`) — not Bun path helpers
+- Use `node:child_process` (`spawn`, `spawnSync`) — **not** `` Bun.$ `cmd` ``
+- Use `node:http` or a Node-compatible library — **not** `Bun.serve()`
+- Do **not** import from `bun:*` specifiers in shipped code
+- Load `.env` explicitly (e.g. via `dotenv`) if needed — Bun's auto `.env` loading is absent under `npx`
 
-Use `bun test` to run tests.
+### Testing
 
-```ts#index.test.ts
-import { test, expect } from "bun:test";
+Tests run via Vitest through the project's `bun run test` script. Do not use `bun:test`.
 
-test("hello world", () => {
-  expect(1).toBe(1);
+```ts
+import { describe, expect, it } from 'vitest';
+
+it('example', () => {
+    expect(1).toBe(1);
 });
 ```
 
-## Frontend
+### Local scripts and smoke tests
 
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
-
-Server:
-
-```ts#index.ts
-import index from "./index.html"
-
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
-```
-
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
-
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
-```
-
-With the following `frontend.tsx`:
-
-```tsx#frontend.tsx
-import React from "react";
-import { createRoot } from "react-dom/client";
-
-// import .css files directly and it works
-import './index.css';
-
-const root = createRoot(document.body);
-
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
-
-root.render(<Frontend />);
-```
-
-Then, run index.ts
-
-```sh
-bun --hot ./index.ts
-```
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+Scripts that are not shipped (smoke tests, local dev tools) may use Bun-native APIs (`Bun.$`, `Bun.file`, etc.) when run under `bun` directly, but must live outside `src/` and must never be imported from library code.
 
 ---
 
@@ -175,11 +106,11 @@ When reviewing code, identify violations by rule number (for example, "G5 violat
 
 > "Always leave the campground cleaner than you found it."
 >
-> -   Robert Baden-Powell
+> - Robert Baden-Powell
 
 > "Always check a module in cleaner than when you checked it out."
 >
-> -   Robert C. Martin, _Clean Code_
+> - Robert C. Martin, _Clean Code_
 
 #### The Philosophy
 
@@ -187,9 +118,9 @@ You don't have to make every module perfect. You simply have to make it **a litt
 
 If we all followed this simple rule:
 
--    Our systems would gradually get better as they evolved
--    Teams would care for the system as a whole
--    The relentless deterioration of software would end
+- Our systems would gradually get better as they evolved
+- Teams would care for the system as a whole
+- The relentless deterioration of software would end
 
 #### When Working on Code
 
@@ -197,19 +128,19 @@ Every time you touch code, look for **at least one small improvement**:
 
 ##### Quick Wins (Do These Immediately)
 
--    Shorten an overly long local, param, or helper name when a single word is clear -> triggers `clean-names`
--    Delete a redundant comment -> triggers `clean-comments`
--    Remove dead code or unused imports
--    Replace a magic number with a named constant
--    Inline a single-use value
--    Remove unnecessary destructuring
+- Shorten an overly long local, param, or helper name when a single word is clear -> triggers `clean-names`
+- Delete a redundant comment -> triggers `clean-comments`
+- Remove dead code or unused imports
+- Replace a magic number with a named constant
+- Inline a single-use value
+- Remove unnecessary destructuring
 
 ##### Deeper Improvements (When Time Allows)
 
--    Split a function that does multiple things -> triggers `clean-functions`
--    Remove duplication (DRY) -> triggers `clean-general`
--    Add missing boundary checks
--    Improve test coverage -> triggers `clean-tests`
+- Split a function that does multiple things -> triggers `clean-functions`
+- Remove duplication (DRY) -> triggers `clean-general`
+- Add missing boundary checks
+- Improve test coverage -> triggers `clean-tests`
 
 #### The Rule in Practice
 
@@ -244,11 +175,11 @@ export function taxed(values: number[]): number[] {
 
 **What changed:**
 
--    Shorter names where one word is clear (N1)
--    No output argument mutation (F2)
--    Flag behavior split into separate functions (F3)
--    Named constant for magic number (G25)
--    Redundant comment removed (C3)
+- Shorter names where one word is clear (N1)
+- No output argument mutation (F2)
+- Flag behavior split into separate functions (F3)
+- Named constant for magic number (G25)
+- Redundant comment removed (C3)
 
 #### Skill Orchestration
 
@@ -267,17 +198,17 @@ This skill coordinates with specialized skills based on what you're doing:
 
 **Don't:**
 
--    Leave code worse than you found it
--    Say "that's not my code"
--    Wait for a dedicated refactoring sprint
--    Make massive changes unrelated to your task
+- Leave code worse than you found it
+- Say "that's not my code"
+- Wait for a dedicated refactoring sprint
+- Make massive changes unrelated to your task
 
 **Do:**
 
--    Make one small improvement with every commit
--    Fix what you see, even if you didn't break it
--    Keep changes proportional to your task
--    Leave a trail of quality improvements
+- Make one small improvement with every commit
+- Fix what you see, even if you didn't break it
+- Keep changes proportional to your task
+- Leave a trail of quality improvements
 
 #### AI Behavior
 
@@ -327,11 +258,11 @@ count += 1; // compensate for zero-indexing in display
 
 If a comment is worth writing, write it well:
 
--    Choose words carefully
--    Use correct grammar
--    Don't ramble or state the obvious
--    Be brief
--    Prefer TSDoc/JSDoc on exported APIs when behavior is not obvious
+- Choose words carefully
+- Use correct grammar
+- Don't ramble or state the obvious
+- Be brief
+- Prefer TSDoc/JSDoc on exported APIs when behavior is not obvious
 
 #### C5: Never Commit Commented-Out Code
 
@@ -563,13 +494,13 @@ const outputDir = context.getScratchDir();
 
 When reviewing AI-generated code, verify:
 
--    [ ] No duplication (G5)
--    [ ] Clear intent, no magic numbers (G16, G25)
--    [ ] Polymorphism over conditionals (G23)
--    [ ] Functions do one thing (G30)
--    [ ] No Law of Demeter violations (G36)
--    [ ] Boundary conditions handled (G3)
--    [ ] Dead code removed (G9)
+- [ ] No duplication (G5)
+- [ ] Clear intent, no magic numbers (G16, G25)
+- [ ] Polymorphism over conditionals (G23)
+- [ ] Functions do one thing (G30)
+- [ ] No Law of Demeter violations (G36)
+- [ ] Boundary conditions handled (G3)
+- [ ] Dead code removed (G9)
 
 ---
 
@@ -583,11 +514,11 @@ Prefer single word names for variables and functions. Only use multiple words if
 
 THIS RULE IS MANDATORY FOR AGENT WRITTEN CODE.
 
--    Use single word names by default for new locals, params, and helper functions.
--    Do not introduce new camelCase compounds when a short single-word alternative is clear.
--    Before finishing edits, review touched lines and shorten newly introduced identifiers where possible.
--    Good short names to prefer: `pid`, `cfg`, `err`, `opts`, `dir`, `root`, `child`, `state`, `timeout`.
--    Avoid unless truly required: `inputPID`, `existingClient`, `connectTimeout`, `workerPath`.
+- Use single word names by default for new locals, params, and helper functions.
+- Do not introduce new camelCase compounds when a short single-word alternative is clear.
+- Before finishing edits, review touched lines and shorten newly introduced identifiers where possible.
+- Good short names to prefer: `pid`, `cfg`, `err`, `opts`, `dir`, `root`, `child`, `state`, `timeout`.
+- Avoid unless truly required: `inputPID`, `existingClient`, `connectTimeout`, `workerPath`.
 
 ```ts
 // Good
@@ -621,11 +552,11 @@ Reduce total variable count by inlining when a value is only used once.
 
 ```ts
 // Good
-const journal = await Bun.file(path.join(dir, "journal.json")).json();
+const journal = JSON.parse(await readFile(join(dir, 'journal.json'), 'utf8')) as Journal;
 
 // Bad
-const journalPath = path.join(dir, "journal.json");
-const journal = await Bun.file(journalPath).json();
+const path = join(dir, 'journal.json');
+const journal = JSON.parse(await readFile(path, 'utf8')) as Journal;
 ```
 
 #### N4: Avoid Unnecessary Destructuring
@@ -679,22 +610,22 @@ function foo() {
 
 Use `snake_case` for database table and column names across ORMs.
 
--    If the ORM maps field names directly to column names, prefer `snake_case` in the schema definition.
--    If the ORM has a separate application-facing model API, use the ORM's idiomatic naming there and map to `snake_case` at the database boundary.
+- If the ORM maps field names directly to column names, prefer `snake_case` in the schema definition.
+- If the ORM has a separate application-facing model API, use the ORM's idiomatic naming there and map to `snake_case` at the database boundary.
 
 ```ts
 // Drizzle - good
-const table = sqliteTable("session", {
+const table = sqliteTable('session', {
     id: text().primaryKey(),
     project_id: text().notNull(),
     created_at: integer().notNull(),
 });
 
 // Drizzle - bad
-const table = sqliteTable("session", {
-    id: text("id").primaryKey(),
-    projectID: text("project_id").notNull(),
-    createdAt: integer("created_at").notNull(),
+const table = sqliteTable('session', {
+    id: text('id').primaryKey(),
+    projectID: text('project_id').notNull(),
+    createdAt: integer('created_at').notNull(),
 });
 ```
 
@@ -720,8 +651,8 @@ model Session {
 
 Short names are preferred, but they must still be clear in context and must not hide side effects.
 
--    Use standard domain terms when available.
--    If one word would mislead, choose the shortest multi-word name that stays clear.
+- Use standard domain terms when available.
+- If one word would mislead, choose the shortest multi-word name that stays clear.
 
 ```ts
 const cfg = new Map<string, string>();
@@ -729,19 +660,19 @@ const cfg = new Map<string, string>();
 // Bad - name hides creation side effect
 export function config(key: string): string {
     if (!cfg.has(key)) {
-        cfg.set(key, "{}");
+        cfg.set(key, '{}');
     }
 
-    return cfg.get(key) ?? "{}";
+    return cfg.get(key) ?? '{}';
 }
 
 // Good - multi-word name is justified because it reveals behavior
 export function ensureConfig(key: string): string {
     if (!cfg.has(key)) {
-        cfg.set(key, "{}");
+        cfg.set(key, '{}');
     }
 
-    return cfg.get(key) ?? "{}";
+    return cfg.get(key) ?? '{}';
 }
 ```
 
@@ -895,11 +826,11 @@ it('creates a user', async () => {
 
 ##### F.I.R.S.T. Principles
 
--    **Fast**: Tests should run quickly
--    **Independent**: Tests should not depend on each other
--    **Repeatable**: Same result every time, in any environment
--    **Self-Validating**: Pass or fail, no manual inspection
--    **Timely**: Written before or with the code, not far after it
+- **Fast**: Tests should run quickly
+- **Independent**: Tests should not depend on each other
+- **Repeatable**: Same result every time, in any environment
+- **Self-Validating**: Pass or fail, no manual inspection
+- **Timely**: Written before or with the code, not far after it
 
 ##### One Concept Per Test
 
