@@ -1,3 +1,19 @@
+import { readConfig } from '../utils/config.js';
+import { ensureLanggraphJson, spawnLanggraph } from '../utils/langgraph.js';
+const toMessage = (err) => {
+    return err instanceof Error ? err.message : String(err);
+};
+export const runLanggraph = async (sub, args, root = process.cwd(), launch = spawnLanggraph) => {
+    try {
+        await readConfig(root);
+        await ensureLanggraphJson(root);
+        return await launch(sub, args);
+    }
+    catch (err) {
+        process.stderr.write(`${toMessage(err)}\n`);
+        return 1;
+    }
+};
 export const createPlaceholderCommand = (name, summary) => ({
     name,
     summary,

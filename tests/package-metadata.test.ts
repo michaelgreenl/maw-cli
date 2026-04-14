@@ -28,4 +28,10 @@ describe('package metadata', () => {
     it('ships prebuilt output without a consumer prepare hook', () => {
         expect(packageJson.scripts).not.toHaveProperty('prepare');
     });
+
+    it('declares langgraph-cli as a runtime dependency', () => {
+        expect(packageJson.dependencies).toMatchObject({
+            '@langchain/langgraph-cli': '^1.1.17',
+        });
+    });
 });
