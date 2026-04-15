@@ -28,4 +28,17 @@ describe('runStart', () => {
 
         expect(launch).toHaveBeenCalledWith('start', ['--host', '0.0.0.0']);
     });
+
+    it('does not resolve config env vars before launching langgraph', async () => {
+        const root = await createRoot('maw-cli-start-env-');
+        await writeConfig(root);
+        const launch = vi.fn(async () => 0);
+        const stderr = captureStderr();
+
+        await expect(runStart([], root, launch)).resolves.toBe(0);
+
+        expect(launch).toHaveBeenCalledWith('start', []);
+        expect(stderr.output.join('')).toBe('');
+        stderr.restore();
+    });
 });

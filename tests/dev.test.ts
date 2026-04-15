@@ -33,6 +33,19 @@ describe('runDev', () => {
         expect(cfg).toEqual(LANGGRAPH_JSON);
     });
 
+    it('does not resolve config env vars before launching langgraph', async () => {
+        const root = await createRoot('maw-cli-dev-env-');
+        await writeConfig(root);
+        const launch = vi.fn(async () => 0);
+        const stderr = captureStderr();
+
+        await expect(runDev([], root, launch)).resolves.toBe(0);
+
+        expect(launch).toHaveBeenCalledWith('dev', []);
+        expect(stderr.output.join('')).toBe('');
+        stderr.restore();
+    });
+
     it('does not overwrite an existing langgraph.json', async () => {
         const root = await createRoot('maw-cli-dev-preserve-');
         await writeConfig(root);

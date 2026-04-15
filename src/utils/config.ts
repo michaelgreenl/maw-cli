@@ -65,14 +65,19 @@ const resolveEnvVars = (obj: Record<string, unknown>): Record<string, unknown> =
     return resolved;
 };
 
-export const readConfig = async (root: string): Promise<MawConfig> => {
+export const ensureConfig = async (root: string): Promise<string> => {
     const file = join(root, DIR, FILE);
 
     try {
         await access(file);
+        return file;
     } catch {
         throw new Error(`Config file not found: ${file}`);
     }
+};
+
+export const readConfig = async (root: string): Promise<MawConfig> => {
+    const file = await ensureConfig(root);
 
     const cfg = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
 

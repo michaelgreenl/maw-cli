@@ -23,4 +23,5 @@ export interface MawConfig {
         }>;
     };
 }
+export declare const ensureConfig: (root: string) => Promise<string>;
 export declare const readConfig: (root: string) => Promise<MawConfig>;

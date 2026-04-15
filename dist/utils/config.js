@@ -30,14 +30,18 @@ const resolveEnvVars = (obj) => {
     }
     return resolved;
 };
-export const readConfig = async (root) => {
+export const ensureConfig = async (root) => {
     const file = join(root, DIR, FILE);
     try {
         await access(file);
+        return file;
     }
     catch {
         throw new Error(`Config file not found: ${file}`);
     }
+};
+export const readConfig = async (root) => {
+    const file = await ensureConfig(root);
     const cfg = JSON.parse(await readFile(file, 'utf8'));
     return resolveEnvVars(cfg);
 };

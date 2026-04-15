@@ -15,7 +15,7 @@ export const cleanupRoots = async (): Promise<void> => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 };
 
-export const writeConfig = async (root: string): Promise<void> => {
+export const writeConfig = async (root: string, apiKey = '${OPENAI_API_KEY}'): Promise<void> => {
     await mkdir(join(root, '.maw'), { recursive: true });
     await writeFile(
         join(root, '.maw', 'config.json'),
@@ -24,7 +24,7 @@ export const writeConfig = async (root: string): Promise<void> => {
                 workspace: '.',
                 graph: { name: 'agent' },
                 openviking: { enabled: true, host: 'localhost', port: 1933 },
-                llm: { provider: 'openai', apiKey: 'plain-key' },
+                llm: { provider: 'openai', apiKey },
                 templates: {
                     sources: ['embedded', 'custom'],
                     customPath: '.maw/templates',

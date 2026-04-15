@@ -1,4 +1,4 @@
-import { readConfig } from '../utils/config.js';
+import { ensureConfig } from '../utils/config.js';
 import { type LanggraphSub, ensureLanggraphJson, spawnLanggraph } from '../utils/langgraph.js';
 
 export interface CommandDefinition<Name extends string = string> {
@@ -18,7 +18,7 @@ export const runLanggraph = async (
     launch: typeof spawnLanggraph = spawnLanggraph,
 ): Promise<number> => {
     try {
-        await readConfig(root);
+        await ensureConfig(root);
         await ensureLanggraphJson(root);
         return await launch(sub, args);
     } catch (err) {
