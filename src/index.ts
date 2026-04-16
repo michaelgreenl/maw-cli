@@ -7,7 +7,7 @@ import { ovIndexCommand } from './commands/ov-index.js';
 import { ovInitCommand } from './commands/ov-init.js';
 import { startCommand } from './commands/start.js';
 import { type CommandDefinition } from './commands/shared.js';
-export { readConfig, type MawConfig } from './utils/config.js';
+export { readConfig, type MawProjectConfig } from './utils/config.js';
 
 const commandDefinitions = [initCommand, devCommand, startCommand, ovInitCommand, ovIndexCommand] as const;
 

@@ -11,7 +11,7 @@ describe('runDev', () => {
         await cleanupRoots();
     });
 
-    it('returns 1 and writes to stderr when .maw/config.json is missing', async () => {
+    it('returns 1 and writes to stderr when maw.json is missing', async () => {
         const root = await createRoot('maw-cli-dev-missing-');
         const launch = vi.fn(async () => 0);
         const stderr = captureStderr();
@@ -19,6 +19,23 @@ describe('runDev', () => {
         await expect(runDev([], root, launch)).resolves.toBe(1);
         expect(launch).not.toHaveBeenCalled();
         expect(stderr.output.join('')).toContain('Config file not found');
+        stderr.restore();
+    });
+
+    it('returns 1 and does not launch when maw.json is malformed', async () => {
+        const root = await createRoot('maw-cli-dev-invalid-');
+        await writeConfig(root, {
+            workspace: '.',
+            openviking: { enabled: true, host: 'localhost' },
+            templates: { customPath: '.maw/templates' },
+        });
+        const launch = vi.fn(async () => 0);
+        const stderr = captureStderr();
+
+        await expect(runDev([], root, launch)).resolves.toBe(1);
+
+        expect(launch).not.toHaveBeenCalled();
+        expect(stderr.output.join('')).toContain('Invalid config: missing openviking.port');
         stderr.restore();
     });
 
@@ -33,9 +50,13 @@ describe('runDev', () => {
         expect(cfg).toEqual(LANGGRAPH_JSON);
     });
 
-    it('does not resolve config env vars before launching langgraph', async () => {
+    it('treats env-like config strings as literal values before launching langgraph', async () => {
         const root = await createRoot('maw-cli-dev-env-');
-        await writeConfig(root);
+        await writeConfig(root, {
+            workspace: '.',
+            openviking: { enabled: true, host: '${MAW_CONFIG_HOST}', port: 1933 },
+            templates: { customPath: '${MAW_CONFIG_PATH}' },
+        });
         const launch = vi.fn(async () => 0);
         const stderr = captureStderr();
 

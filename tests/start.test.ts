@@ -8,7 +8,7 @@ describe('runStart', () => {
         await cleanupRoots();
     });
 
-    it('returns 1 and writes to stderr when .maw/config.json is missing', async () => {
+    it('returns 1 and writes to stderr when maw.json is missing', async () => {
         const root = await createRoot('maw-cli-start-missing-');
         const launch = vi.fn(async () => 0);
         const stderr = captureStderr();
@@ -29,9 +29,13 @@ describe('runStart', () => {
         expect(launch).toHaveBeenCalledWith('start', ['--host', '0.0.0.0']);
     });
 
-    it('does not resolve config env vars before launching langgraph', async () => {
+    it('treats env-like config strings as literal values before launching langgraph', async () => {
         const root = await createRoot('maw-cli-start-env-');
-        await writeConfig(root);
+        await writeConfig(root, {
+            workspace: '.',
+            openviking: { enabled: true, host: '${MAW_CONFIG_HOST}', port: 1933 },
+            templates: { customPath: '${MAW_CONFIG_PATH}' },
+        });
         const launch = vi.fn(async () => 0);
         const stderr = captureStderr();
 

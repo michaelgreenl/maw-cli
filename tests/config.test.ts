@@ -23,94 +23,79 @@ const createRoot = async (): Promise<string> => {
     return root;
 };
 
-const createConfig = (apiKey: string, host = 'localhost') => ({
+const createConfig = (host = 'localhost', customPath = '.maw/templates') => ({
     workspace: '.',
-    graph: { name: 'agent', agent: 'researcher' },
     openviking: { enabled: true, host, port: 1933 },
-    llm: { provider: 'openai', apiKey },
     templates: {
-        sources: ['embedded', 'custom'],
-        customPath: '.maw/templates',
-        gitRepos: [],
-        globalSnippets: ['general-coding', 'security', 'project-context'],
-        agents: {
-            researcher: { snippets: ['research-rules', 'python'] },
-            coder: { snippets: ['typescript', 'coding-rules'] },
-        },
+        customPath,
     },
 });
 
 const writeConfigFile = async (root: string, cfg: unknown): Promise<void> => {
-    await mkdir(join(root, '.maw'), { recursive: true });
-    await writeFile(join(root, '.maw', 'config.json'), JSON.stringify(cfg, null, 2));
+    await mkdir(root, { recursive: true });
+    await writeFile(join(root, 'maw.json'), JSON.stringify(cfg, null, 2));
 };
 
 describe('readConfig', () => {
     afterEach(async () => {
-        delete process.env.MAW_CONFIG_KEY;
-        delete process.env.MAW_CONFIG_HOST;
-        delete process.env.MAW_CONFIG_NESTED;
-
         await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
     });
 
-    it('reads config from the public api and resolves llm api keys', async () => {
+    it('reads maw.json from the public api', async () => {
         const root = await createRoot();
         const readConfig = await load();
 
-        process.env.MAW_CONFIG_KEY = 'key-123';
-        await writeConfigFile(root, createConfig('${MAW_CONFIG_KEY}'));
+        await writeConfigFile(root, createConfig());
 
         await expect(readConfig(root)).resolves.toMatchObject({
             workspace: '.',
-            graph: { name: 'agent', agent: 'researcher' },
             openviking: { enabled: true, host: 'localhost', port: 1933 },
-            llm: { provider: 'openai', apiKey: 'key-123' },
+            templates: { customPath: '.maw/templates' },
         });
     });
 
-    it('throws when .maw/config.json is missing', async () => {
+    it('throws when maw.json is missing', async () => {
         const root = await createRoot();
         const readConfig = await load();
 
-        await expect(readConfig(root)).rejects.toThrow(`Config file not found: ${join(root, '.maw', 'config.json')}`);
+        await expect(readConfig(root)).rejects.toThrow(`Config file not found: ${join(root, 'maw.json')}`);
     });
 
-    it('throws when a referenced env var is unset', async () => {
+    it('treats env-like strings as literals', async () => {
         const root = await createRoot();
         const readConfig = await load();
 
-        await writeConfigFile(root, createConfig('${MAW_CONFIG_KEY}'));
-
-        await expect(readConfig(root)).rejects.toThrow(
-            'Environment variable MAW_CONFIG_KEY is not set but referenced in .maw/config.json',
-        );
-    });
-
-    it('resolves nested interpolation in a single read', async () => {
-        const root = await createRoot();
-        const readConfig = await load();
-
-        process.env.MAW_CONFIG_KEY = 'nested-key';
-        process.env.MAW_CONFIG_HOST = '127.0.0.1';
-        await writeConfigFile(root, createConfig('${MAW_CONFIG_KEY}', '${MAW_CONFIG_HOST}'));
+        await writeConfigFile(root, createConfig('${MAW_CONFIG_HOST}', '${MAW_CONFIG_PATH}'));
 
         await expect(readConfig(root)).resolves.toMatchObject({
-            openviking: { host: '127.0.0.1' },
-            llm: { apiKey: 'nested-key' },
+            openviking: { host: '${MAW_CONFIG_HOST}' },
+            templates: { customPath: '${MAW_CONFIG_PATH}' },
         });
+    });
+
+    it('throws when maw.json is missing required project fields', async () => {
+        const root = await createRoot();
+        const readConfig = await load();
+
+        await writeConfigFile(root, {
+            workspace: '.',
+            openviking: { enabled: true, host: 'localhost' },
+            templates: {},
+        });
+
+        await expect(readConfig(root)).rejects.toThrow('Invalid config: missing openviking.port');
     });
 
     it('passes through plain strings, booleans, and numbers unchanged', async () => {
         const root = await createRoot();
         const readConfig = await load();
 
-        await writeConfigFile(root, createConfig('plain-key'));
+        await writeConfigFile(root, createConfig('127.0.0.1', 'custom/templates'));
 
         await expect(readConfig(root)).resolves.toMatchObject({
             workspace: '.',
-            openviking: { enabled: true, port: 1933 },
-            llm: { apiKey: 'plain-key' },
+            openviking: { enabled: true, host: '127.0.0.1', port: 1933 },
+            templates: { customPath: 'custom/templates' },
         });
     });
 });

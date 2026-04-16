@@ -1,31 +1,17 @@
 import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-const DIR = '.maw';
-const FILE = 'config.json';
-const ENV = /\$\{(\w+)\}/g;
+const FILE = 'maw.json';
 
-export interface MawConfig {
+export interface MawProjectConfig {
     workspace: string;
-    graph: {
-        name: string;
-        agent?: string;
-    };
     openviking: {
         enabled: boolean;
         host: string;
         port: number;
     };
-    llm: {
-        provider: string;
-        apiKey: string;
-    };
     templates: {
-        sources: string[];
         customPath: string;
-        gitRepos: string[];
-        globalSnippets: string[];
-        agents: Record<string, { snippets: string[] }>;
     };
 }
 
@@ -33,53 +19,83 @@ const isRecord = (value: unknown): value is Record<string, unknown> => {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 };
 
-const resolveString = (value: string): string => {
-    return value.replace(ENV, (_match, name: string) => {
-        const env = process.env[name];
-
-        if (env === undefined) {
-            throw new Error(`Environment variable ${name} is not set but referenced in .maw/config.json`);
-        }
-
-        return env;
-    });
+const invalid = (field: string): Error => {
+    return new Error(`Invalid config: missing ${field}`);
 };
 
-const resolveEnvVars = (obj: Record<string, unknown>): Record<string, unknown> => {
-    const resolved: Record<string, unknown> = {};
-
-    for (const [key, value] of Object.entries(obj)) {
-        if (typeof value === 'string') {
-            resolved[key] = resolveString(value);
-            continue;
-        }
-
-        if (isRecord(value)) {
-            resolved[key] = resolveEnvVars(value);
-            continue;
-        }
-
-        resolved[key] = value;
+const parseString = (value: unknown, field: string): string => {
+    if (typeof value !== 'string') {
+        throw invalid(field);
     }
 
-    return resolved;
+    return value;
 };
 
-export const ensureConfig = async (root: string): Promise<string> => {
-    const file = join(root, DIR, FILE);
+const parseBoolean = (value: unknown, field: string): boolean => {
+    if (typeof value !== 'boolean') {
+        throw invalid(field);
+    }
+
+    return value;
+};
+
+const parseNumber = (value: unknown, field: string): number => {
+    if (typeof value !== 'number') {
+        throw invalid(field);
+    }
+
+    return value;
+};
+
+const parseConfig = (value: unknown): MawProjectConfig => {
+    if (!isRecord(value)) {
+        throw invalid('root');
+    }
+
+    const openviking = value.openviking;
+    const templates = value.templates;
+
+    if (!isRecord(openviking)) {
+        throw invalid('openviking');
+    }
+
+    if (!isRecord(templates)) {
+        throw invalid('templates');
+    }
+
+    return {
+        workspace: parseString(value.workspace, 'workspace'),
+        openviking: {
+            enabled: parseBoolean(openviking.enabled, 'openviking.enabled'),
+            host: parseString(openviking.host, 'openviking.host'),
+            port: parseNumber(openviking.port, 'openviking.port'),
+        },
+        templates: {
+            customPath: parseString(templates.customPath, 'templates.customPath'),
+        },
+    };
+};
+
+const loadConfig = async (root: string): Promise<{ file: string; cfg: MawProjectConfig }> => {
+    const file = join(root, FILE);
 
     try {
         await access(file);
-        return file;
     } catch {
         throw new Error(`Config file not found: ${file}`);
     }
+
+    const cfg = parseConfig(JSON.parse(await readFile(file, 'utf8')) as unknown);
+
+    return { file, cfg };
 };
 
-export const readConfig = async (root: string): Promise<MawConfig> => {
-    const file = await ensureConfig(root);
+export const ensureConfig = async (root: string): Promise<string> => {
+    const { file } = await loadConfig(root);
+    return file;
+};
 
-    const cfg = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>;
-
-    return resolveEnvVars(cfg) as unknown as MawConfig;
+export const readConfig = async (root: string): Promise<MawProjectConfig> => {
+    const { cfg } = await loadConfig(root);
+    return cfg;
 };

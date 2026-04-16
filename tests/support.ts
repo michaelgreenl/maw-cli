@@ -15,30 +15,17 @@ export const cleanupRoots = async (): Promise<void> => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 };
 
-export const writeConfig = async (root: string, apiKey = '${OPENAI_API_KEY}'): Promise<void> => {
-    await mkdir(join(root, '.maw'), { recursive: true });
-    await writeFile(
-        join(root, '.maw', 'config.json'),
-        JSON.stringify(
-            {
-                workspace: '.',
-                graph: { name: 'agent' },
-                openviking: { enabled: true, host: 'localhost', port: 1933 },
-                llm: { provider: 'openai', apiKey },
-                templates: {
-                    sources: ['embedded', 'custom'],
-                    customPath: '.maw/templates',
-                    gitRepos: [],
-                    globalSnippets: ['general-coding', 'security', 'project-context'],
-                    agents: {
-                        researcher: { snippets: ['research-rules', 'python'] },
-                    },
-                },
-            },
-            null,
-            2,
-        ),
-    );
+const createConfig = () => ({
+    workspace: '.',
+    openviking: { enabled: true, host: 'localhost', port: 1933 },
+    templates: {
+        customPath: '.maw/templates',
+    },
+});
+
+export const writeConfig = async (root: string, cfg: unknown = createConfig()): Promise<void> => {
+    await mkdir(root, { recursive: true });
+    await writeFile(join(root, 'maw.json'), JSON.stringify(cfg, null, 2));
 };
 
 export const captureStderr = (): { output: string[]; restore: () => void } => {
