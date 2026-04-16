@@ -1,0 +1,8 @@
+{
+    "name": "code-agent",
+    "type": "module",
+    "exports": {
+        "./package.json": "./package.json",
+        "./scaffold": "./scaffold.js"
+    }
+}

@@ -1,72 +1,49 @@
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { runInit } from '../src/commands/init.js';
-
-const roots: string[] = [];
+import { loadWorkflows, runInit } from '../src/commands/init.js';
+import { cleanupRoots, createProject, createRoot, writePackage } from './support.js';
 
 const readJson = async <T>(file: string): Promise<T> => {
     return JSON.parse(await readFile(file, 'utf8')) as T;
 };
 
-const createWorkflow = async (root: string): Promise<void> => {
-    const dir = join(root, 'node_modules', 'docs-agent');
-
-    await mkdir(dir, { recursive: true });
-    await writeFile(
-        join(dir, 'package.json'),
-        JSON.stringify({
-            name: 'docs-agent',
-            type: 'module',
-            exports: {
-                './package.json': './package.json',
-                './scaffold': './scaffold.js',
-            },
-        }),
-    );
-    await writeFile(
-        join(dir, 'scaffold.js'),
-        [
-            'export const scaffold = {',
-            '  packageName: "docs-agent",',
-            '};',
-            '',
-            'export const createScaffoldFiles = () => ({',
-            '  ".maw/config.json": JSON.stringify({ agents: { planner: { skills: ["general-coding"] } } }, null, 2),',
-            '  ".maw/graph.ts": "import { createGraph } from \'docs-agent\';\\n\\nexport const graph = createGraph();\\n",',
-            '});',
-            '',
-        ].join('\n'),
-    );
-};
-
-const createProject = async (): Promise<string> => {
-    const root = await mkdtemp(join(tmpdir(), 'maw-cli-init-'));
-    roots.push(root);
-
-    await writeFile(
-        join(root, 'package.json'),
-        JSON.stringify({
-            name: 'target-project',
-            private: true,
-            dependencies: {
-                'docs-agent': 'file:../docs-agent',
-            },
-        }),
-    );
-    await createWorkflow(root);
-
-    return root;
-};
-
 describe('maw-cli init', () => {
     afterEach(async () => {
-        await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+        await cleanupRoots();
+    });
+
+    it('loads every workflow package sorted by workflow name', async () => {
+        const root = await createProject('maw-cli-workflows-', ['docs-agent', 'code-agent']);
+
+        const workflows = await loadWorkflows(root);
+
+        expect(workflows.map((workflow) => workflow.scaffold)).toEqual([
+            { packageName: 'code-agent', workflow: 'code-agent' },
+            { packageName: 'docs-agent', workflow: 'docs-agent' },
+        ]);
+        await expect(Promise.resolve(workflows[0].createScaffoldFiles())).resolves.toEqual({
+            'config.json': JSON.stringify({ agents: { coder: { skills: ['general-coding'] } } }, null, 2),
+            'graph.ts': "import { createGraph } from 'code-agent';\n\nexport const graph = createGraph();\n",
+        });
+    });
+
+    it('returns an empty list when no workflow packages expose the scaffold contract', async () => {
+        const root = await createRoot('maw-cli-workflows-empty-');
+
+        await writePackage(root);
+
+        await expect(loadWorkflows(root)).resolves.toEqual([]);
+    });
+
+    it('fails when two packages claim the same workflow name', async () => {
+        const root = await createProject('maw-cli-workflows-dup-', ['docs-agent', 'docs-agent-alt']);
+
+        await expect(loadWorkflows(root)).rejects.toThrow('Duplicate workflow name: docs-agent');
     });
 
     it('creates maw-cli-owned project scaffold files and directories', async () => {
-        const root = await createProject();
+        const root = await createProject('maw-cli-init-', ['docs-agent']);
 
         await expect(runInit([], root)).resolves.toBe(0);
 
@@ -117,7 +94,7 @@ describe('maw-cli init', () => {
     });
 
     it('preserves project-owned files and appends only the openviking gitignore entry once', async () => {
-        const root = await createProject();
+        const root = await createProject('maw-cli-init-preserve-', ['docs-agent']);
 
         await mkdir(join(root, '.maw'), { recursive: true });
         await writeFile(join(root, 'maw.json'), '{\n  "workspace": "custom"\n}\n');
@@ -135,10 +112,9 @@ describe('maw-cli init', () => {
     });
 
     it('fails when no installed workflow package exposes the scaffold contract', async () => {
-        const root = await mkdtemp(join(tmpdir(), 'maw-cli-init-empty-'));
-        roots.push(root);
+        const root = await createRoot('maw-cli-init-empty-');
 
-        await writeFile(join(root, 'package.json'), JSON.stringify({ name: 'target-project', private: true }));
+        await writePackage(root);
 
         await expect(runInit([], root)).resolves.toBe(1);
     });

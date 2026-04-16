@@ -62,6 +62,9 @@ const readJson = async (filePath) => {
 const readPackageJson = (root) => {
     return readJson(join(root, PACKAGE_JSON));
 };
+const isRecord = (value) => {
+    return typeof value === 'object' && value !== null;
+};
 const getInstalledDependencyNames = (pkg) => {
     const names = new Set();
     for (const field of dependencyFields) {
@@ -94,7 +97,15 @@ const resolveScaffoldExport = (exportsField) => {
     }
     return undefined;
 };
-const isWorkflowModule = (value) => typeof value.scaffold?.packageName === 'string' && typeof value.createScaffoldFiles === 'function';
+const isWorkflowModule = (value) => typeof value.scaffold?.packageName === 'string' &&
+    typeof value.scaffold?.workflow === 'string' &&
+    typeof value.createScaffoldFiles === 'function';
+const isWorkflowFiles = (value) => {
+    if (!isRecord(value)) {
+        return false;
+    }
+    return typeof value['graph.ts'] === 'string' && typeof value['config.json'] === 'string';
+};
 const createProjectFiles = () => ({
     'maw.json': formatJson(PROJECT_CFG),
     '.maw/ov.conf': formatJson(OV_CFG),
@@ -116,19 +127,58 @@ const tryLoadWorkflowModule = async (requireFromRoot, packageName) => {
         return null;
     }
 };
-const loadWorkflow = async (root) => {
+const sortWorkflows = (mods) => {
+    return mods.sort((left, right) => {
+        const byWorkflow = left.scaffold.workflow.localeCompare(right.scaffold.workflow);
+        if (byWorkflow !== 0) {
+            return byWorkflow;
+        }
+        return left.scaffold.packageName.localeCompare(right.scaffold.packageName);
+    });
+};
+const findDuplicateWorkflow = (mods) => {
+    const seen = new Set();
+    for (const mod of mods) {
+        const name = mod.scaffold.workflow;
+        if (seen.has(name)) {
+            return name;
+        }
+        seen.add(name);
+    }
+    return null;
+};
+export const loadWorkflows = async (root) => {
     const pkg = await readPackageJson(root);
     const requireFromRoot = createRequire(join(root, PACKAGE_JSON));
     const dependencyNames = getInstalledDependencyNames(pkg);
-    const matches = (await Promise.all(dependencyNames.map((name) => tryLoadWorkflowModule(requireFromRoot, name)))).filter((mod) => mod !== null);
-    if (matches.length === 1) {
-        return matches[0];
+    const matches = await Promise.all(dependencyNames.map((name) => tryLoadWorkflowModule(requireFromRoot, name)));
+    const mods = sortWorkflows(matches.filter((mod) => mod !== null));
+    const duplicate = findDuplicateWorkflow(mods);
+    if (duplicate) {
+        throw new Error(`Duplicate workflow name: ${duplicate}`);
     }
-    if (matches.length === 0) {
+    return mods;
+};
+const pickWorkflow = (mods) => {
+    if (mods.length === 1) {
+        return mods[0];
+    }
+    if (mods.length === 0) {
         throw new Error('No installed workflow package exposes the MAW scaffold contract.');
     }
     throw new Error('Multiple installed workflow packages expose the MAW scaffold contract.');
 };
+const readWorkflowFiles = async (workflow) => {
+    const files = await workflow.createScaffoldFiles();
+    if (isWorkflowFiles(files)) {
+        return files;
+    }
+    throw new Error(`Invalid scaffold files from ${workflow.scaffold.packageName}.`);
+};
+const toLegacyFiles = (files) => ({
+    '.maw/config.json': files['config.json'],
+    '.maw/graph.ts': files['graph.ts'],
+});
 const mergeGitignore = async (root, entries) => {
     const gitignorePath = join(root, '.gitignore');
     const existing = (await fileExists(gitignorePath)) ? await readFile(gitignorePath, 'utf8') : '';
@@ -150,12 +200,12 @@ const writeMissingFiles = async (root, files) => {
 };
 export const runInit = async (_args, root = process.cwd()) => {
     try {
-        const workflow = await loadWorkflow(root);
+        const workflow = pickWorkflow(await loadWorkflows(root));
         for (const dir of PROJECT_DIRS) {
             await mkdir(join(root, dir), { recursive: true });
         }
         await writeMissingFiles(root, createProjectFiles());
-        const scaffoldFiles = await workflow.createScaffoldFiles(workflow.scaffold.packageName);
+        const scaffoldFiles = toLegacyFiles(await readWorkflowFiles(workflow));
         await writeMissingFiles(root, scaffoldFiles);
         await mergeGitignore(root, [GITIGNORE_ENTRY]);
         process.stdout.write(`Initialized .maw scaffold using ${workflow.scaffold.packageName}.\n`);
