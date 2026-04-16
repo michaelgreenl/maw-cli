@@ -6,7 +6,10 @@ const PACKAGE_JSON = 'package.json';
 const SCAFFOLD_EXPORT = './scaffold';
 const IGNORED_PACKAGE = 'maw-cli';
 const GITIGNORE_ENTRY = '.maw/openviking/';
+const GRAPH_ROOT = '.maw/graphs';
 const PROJECT_DIRS = ['.maw/templates', '.maw/graphs'];
+const LANGGRAPH_NODE = '20';
+const ROOT_ENV = '../../../.env';
 const PROJECT_CFG = {
     workspace: '.',
     openviking: {
@@ -110,6 +113,21 @@ const createProjectFiles = () => ({
     'maw.json': formatJson(PROJECT_CFG),
     '.maw/ov.conf': formatJson(OV_CFG),
 });
+const langgraphJson = (name) => {
+    return formatJson({
+        node_version: LANGGRAPH_NODE,
+        graphs: { [name]: './graph.ts:graph' },
+        env: ROOT_ENV,
+    });
+};
+const workflowFiles = (name, files) => {
+    const dir = join(GRAPH_ROOT, name);
+    return {
+        [join(dir, 'graph.ts')]: files['graph.ts'],
+        [join(dir, 'config.json')]: files['config.json'],
+        [join(dir, 'langgraph.json')]: langgraphJson(name),
+    };
+};
 const tryLoadWorkflowModule = async (requireFromRoot, packageName) => {
     try {
         const manifestPath = requireFromRoot.resolve(`${packageName}/${PACKAGE_JSON}`);
@@ -159,15 +177,6 @@ export const loadWorkflows = async (root) => {
     }
     return mods;
 };
-const pickWorkflow = (mods) => {
-    if (mods.length === 1) {
-        return mods[0];
-    }
-    if (mods.length === 0) {
-        throw new Error('No installed workflow package exposes the MAW scaffold contract.');
-    }
-    throw new Error('Multiple installed workflow packages expose the MAW scaffold contract.');
-};
 const readWorkflowFiles = async (workflow) => {
     const files = await workflow.createScaffoldFiles();
     if (isWorkflowFiles(files)) {
@@ -175,10 +184,6 @@ const readWorkflowFiles = async (workflow) => {
     }
     throw new Error(`Invalid scaffold files from ${workflow.scaffold.packageName}.`);
 };
-const toLegacyFiles = (files) => ({
-    '.maw/config.json': files['config.json'],
-    '.maw/graph.ts': files['graph.ts'],
-});
 const mergeGitignore = async (root, entries) => {
     const gitignorePath = join(root, '.gitignore');
     const existing = (await fileExists(gitignorePath)) ? await readFile(gitignorePath, 'utf8') : '';
@@ -198,17 +203,33 @@ const writeMissingFiles = async (root, files) => {
         await writeFile(filePath, content);
     }
 };
+const ensureDirs = async (root, dirs) => {
+    for (const dir of dirs) {
+        await mkdir(join(root, dir), { recursive: true });
+    }
+};
+const writeWorkflows = async (root, mods) => {
+    for (const mod of mods) {
+        const name = mod.scaffold.workflow;
+        await mkdir(join(root, GRAPH_ROOT, name), { recursive: true });
+        await writeMissingFiles(root, workflowFiles(name, await readWorkflowFiles(mod)));
+    }
+};
+const workflowNames = (mods) => {
+    return mods.map((mod) => mod.scaffold.workflow).join(', ');
+};
 export const runInit = async (_args, root = process.cwd()) => {
     try {
-        const workflow = pickWorkflow(await loadWorkflows(root));
-        for (const dir of PROJECT_DIRS) {
-            await mkdir(join(root, dir), { recursive: true });
-        }
+        const mods = await loadWorkflows(root);
+        await ensureDirs(root, PROJECT_DIRS);
         await writeMissingFiles(root, createProjectFiles());
-        const scaffoldFiles = toLegacyFiles(await readWorkflowFiles(workflow));
-        await writeMissingFiles(root, scaffoldFiles);
         await mergeGitignore(root, [GITIGNORE_ENTRY]);
-        process.stdout.write(`Initialized .maw scaffold using ${workflow.scaffold.packageName}.\n`);
+        if (mods.length === 0) {
+            process.stderr.write('Warning: initialized project MAW scaffold without workflows. Install a workflow package and rerun `maw-cli init`.\n');
+            return 0;
+        }
+        await writeWorkflows(root, mods);
+        process.stdout.write(`Initialized project MAW scaffold for workflows: ${workflowNames(mods)}.\n`);
         return 0;
     }
     catch (error) {

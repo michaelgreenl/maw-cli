@@ -71,3 +71,18 @@ export const captureStderr = (): { output: string[]; restore: () => void } => {
         },
     };
 };
+
+export const captureStdout = (): { output: string[]; restore: () => void } => {
+    const output: string[] = [];
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => {
+        output.push(String(chunk));
+        return true;
+    }) as typeof process.stdout.write);
+
+    return {
+        output,
+        restore: () => {
+            spy.mockRestore();
+        },
+    };
+};

@@ -27,7 +27,10 @@ const PACKAGE_JSON = 'package.json';
 const SCAFFOLD_EXPORT = './scaffold';
 const IGNORED_PACKAGE = 'maw-cli';
 const GITIGNORE_ENTRY = '.maw/openviking/';
+const GRAPH_ROOT = '.maw/graphs';
 const PROJECT_DIRS = ['.maw/templates', '.maw/graphs'] as const;
+const LANGGRAPH_NODE = '20';
+const ROOT_ENV = '../../../.env';
 
 const PROJECT_CFG = {
     workspace: '.',
@@ -155,6 +158,24 @@ const createProjectFiles = (): Record<string, string> => ({
     '.maw/ov.conf': formatJson(OV_CFG),
 });
 
+const langgraphJson = (name: string): string => {
+    return formatJson({
+        node_version: LANGGRAPH_NODE,
+        graphs: { [name]: './graph.ts:graph' },
+        env: ROOT_ENV,
+    });
+};
+
+const workflowFiles = (name: string, files: WorkflowFiles): Record<string, string> => {
+    const dir = join(GRAPH_ROOT, name);
+
+    return {
+        [join(dir, 'graph.ts')]: files['graph.ts'],
+        [join(dir, 'config.json')]: files['config.json'],
+        [join(dir, 'langgraph.json')]: langgraphJson(name),
+    };
+};
+
 const tryLoadWorkflowModule = async (
     requireFromRoot: NodeRequire,
     packageName: string,
@@ -223,18 +244,6 @@ export const loadWorkflows = async (root: string): Promise<WorkflowModule[]> => 
     return mods;
 };
 
-const pickWorkflow = (mods: readonly WorkflowModule[]): WorkflowModule => {
-    if (mods.length === 1) {
-        return mods[0];
-    }
-
-    if (mods.length === 0) {
-        throw new Error('No installed workflow package exposes the MAW scaffold contract.');
-    }
-
-    throw new Error('Multiple installed workflow packages expose the MAW scaffold contract.');
-};
-
 const readWorkflowFiles = async (workflow: WorkflowModule): Promise<WorkflowFiles> => {
     const files = await workflow.createScaffoldFiles();
 
@@ -244,11 +253,6 @@ const readWorkflowFiles = async (workflow: WorkflowModule): Promise<WorkflowFile
 
     throw new Error(`Invalid scaffold files from ${workflow.scaffold.packageName}.`);
 };
-
-const toLegacyFiles = (files: WorkflowFiles): Record<string, string> => ({
-    '.maw/config.json': files['config.json'],
-    '.maw/graph.ts': files['graph.ts'],
-});
 
 const mergeGitignore = async (root: string, entries: readonly string[]): Promise<void> => {
     const gitignorePath = join(root, '.gitignore');
@@ -276,22 +280,43 @@ const writeMissingFiles = async (root: string, files: Record<string, string>): P
     }
 };
 
+const ensureDirs = async (root: string, dirs: readonly string[]): Promise<void> => {
+    for (const dir of dirs) {
+        await mkdir(join(root, dir), { recursive: true });
+    }
+};
+
+const writeWorkflows = async (root: string, mods: readonly WorkflowModule[]): Promise<void> => {
+    for (const mod of mods) {
+        const name = mod.scaffold.workflow;
+
+        await mkdir(join(root, GRAPH_ROOT, name), { recursive: true });
+        await writeMissingFiles(root, workflowFiles(name, await readWorkflowFiles(mod)));
+    }
+};
+
+const workflowNames = (mods: readonly WorkflowModule[]): string => {
+    return mods.map((mod) => mod.scaffold.workflow).join(', ');
+};
+
 export const runInit = async (_args: readonly string[], root = process.cwd()): Promise<number> => {
     try {
-        const workflow = pickWorkflow(await loadWorkflows(root));
+        const mods = await loadWorkflows(root);
 
-        for (const dir of PROJECT_DIRS) {
-            await mkdir(join(root, dir), { recursive: true });
-        }
-
+        await ensureDirs(root, PROJECT_DIRS);
         await writeMissingFiles(root, createProjectFiles());
-
-        const scaffoldFiles = toLegacyFiles(await readWorkflowFiles(workflow));
-
-        await writeMissingFiles(root, scaffoldFiles);
         await mergeGitignore(root, [GITIGNORE_ENTRY]);
 
-        process.stdout.write(`Initialized .maw scaffold using ${workflow.scaffold.packageName}.\n`);
+        if (mods.length === 0) {
+            process.stderr.write(
+                'Warning: initialized project MAW scaffold without workflows. Install a workflow package and rerun `maw-cli init`.\n',
+            );
+            return 0;
+        }
+
+        await writeWorkflows(root, mods);
+
+        process.stdout.write(`Initialized project MAW scaffold for workflows: ${workflowNames(mods)}.\n`);
 
         return 0;
     } catch (error) {
