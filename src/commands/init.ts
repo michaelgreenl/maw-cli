@@ -13,8 +13,6 @@ interface PackageJson {
 
 interface WorkflowScaffold {
     packageName: string;
-    directories: readonly string[];
-    gitignore: readonly string[];
 }
 
 interface WorkflowModule {
@@ -25,8 +23,51 @@ interface WorkflowModule {
 const PACKAGE_JSON = 'package.json';
 const SCAFFOLD_EXPORT = './scaffold';
 const IGNORED_PACKAGE = 'maw-cli';
+const GITIGNORE_ENTRY = '.maw/openviking/';
+const PROJECT_DIRS = ['.maw/templates', '.maw/graphs'] as const;
+
+const PROJECT_CFG = {
+    workspace: '.',
+    openviking: {
+        enabled: true,
+        host: 'localhost',
+        port: 1933,
+    },
+    templates: {
+        customPath: '.maw/templates',
+    },
+} as const;
+
+const OV_CFG = {
+    storage: {
+        workspace: './.maw/openviking',
+    },
+    log: {
+        level: 'INFO',
+        output: 'stdout',
+    },
+    embedding: {
+        dense: {
+            api_base: 'https://api.openai.com/v1',
+            api_key: '${OPENAI_API_KEY}',
+            provider: 'openai',
+            dimension: 3072,
+            model: 'text-embedding-3-large',
+        },
+        max_concurrent: 10,
+    },
+    vlm: {
+        api_base: 'https://api.openai.com/v1',
+        api_key: '${OPENAI_API_KEY}',
+        provider: 'openai',
+        model: 'gpt-4o',
+        max_concurrent: 100,
+    },
+} as const;
 
 const dependencyFields = ['dependencies', 'devDependencies', 'optionalDependencies'] as const;
+
+const formatJson = (value: unknown): string => `${JSON.stringify(value, null, 4)}\n`;
 
 const fileExists = async (filePath: string): Promise<boolean> => {
     try {
@@ -90,7 +131,12 @@ const resolveScaffoldExport = (exportsField: PackageJson['exports']): string | u
 };
 
 const isWorkflowModule = (value: Partial<WorkflowModule>): value is WorkflowModule =>
-    Boolean(value.scaffold) && typeof value.createScaffoldFiles === 'function';
+    typeof value.scaffold?.packageName === 'string' && typeof value.createScaffoldFiles === 'function';
+
+const createProjectFiles = (): Record<string, string> => ({
+    'maw.json': formatJson(PROJECT_CFG),
+    '.maw/ov.conf': formatJson(OV_CFG),
+});
 
 const tryLoadWorkflowModule = async (
     requireFromRoot: NodeRequire,
@@ -165,14 +211,16 @@ export const runInit = async (_args: readonly string[], root = process.cwd()): P
     try {
         const workflow = await loadWorkflow(root);
 
-        for (const directory of workflow.scaffold.directories) {
-            await mkdir(join(root, directory), { recursive: true });
+        for (const dir of PROJECT_DIRS) {
+            await mkdir(join(root, dir), { recursive: true });
         }
+
+        await writeMissingFiles(root, createProjectFiles());
 
         const scaffoldFiles = await workflow.createScaffoldFiles(workflow.scaffold.packageName);
 
         await writeMissingFiles(root, scaffoldFiles);
-        await mergeGitignore(root, workflow.scaffold.gitignore);
+        await mergeGitignore(root, [GITIGNORE_ENTRY]);
 
         process.stdout.write(`Initialized .maw scaffold using ${workflow.scaffold.packageName}.\n`);
 
