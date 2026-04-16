@@ -2,14 +2,13 @@ import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { createWorkflowLanggraphJson } from '../utils/langgraph.js';
 const PACKAGE_JSON = 'package.json';
 const SCAFFOLD_EXPORT = './scaffold';
 const IGNORED_PACKAGE = 'maw-cli';
 const GITIGNORE_ENTRY = '.maw/openviking/';
 const GRAPH_ROOT = '.maw/graphs';
 const PROJECT_DIRS = ['.maw/templates', '.maw/graphs'];
-const LANGGRAPH_NODE = '20';
-const ROOT_ENV = '../../../.env';
 const PROJECT_CFG = {
     workspace: '.',
     openviking: {
@@ -113,19 +112,12 @@ const createProjectFiles = () => ({
     'maw.json': formatJson(PROJECT_CFG),
     '.maw/ov.conf': formatJson(OV_CFG),
 });
-const langgraphJson = (name) => {
-    return formatJson({
-        node_version: LANGGRAPH_NODE,
-        graphs: { [name]: './graph.ts:graph' },
-        env: ROOT_ENV,
-    });
-};
 const workflowFiles = (name, files) => {
     const dir = join(GRAPH_ROOT, name);
     return {
         [join(dir, 'graph.ts')]: files['graph.ts'],
         [join(dir, 'config.json')]: files['config.json'],
-        [join(dir, 'langgraph.json')]: langgraphJson(name),
+        [join(dir, 'langgraph.json')]: formatJson(createWorkflowLanggraphJson(name)),
     };
 };
 const tryLoadWorkflowModule = async (requireFromRoot, packageName) => {

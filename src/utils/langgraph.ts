@@ -6,20 +6,27 @@ import { dirname, join } from 'node:path';
 const FILE = 'langgraph.json';
 const PKG = '@langchain/langgraph-cli';
 const BIN = 'langgraphjs';
+const NODE = '20';
+const ROOT_ENV = '.env';
+const ROOT_GRAPH = './.maw/graph.ts:graph';
+const ROOT_DEPS = ['.'] as const;
+const WORKFLOW_ENV = '../../../.env';
+const WORKFLOW_GRAPH = './graph.ts:graph';
+const WORKFLOW_FILES = ['graph.ts', 'config.json', FILE] as const;
 const req = createRequire(import.meta.url);
 
 type Manifest = {
     bin?: string | Record<string, string>;
 };
 
-export type LanggraphSub = 'dev' | 'start';
+export interface LanggraphConfig {
+    node_version: string;
+    graphs: Record<string, string>;
+    env: string;
+    dependencies?: readonly string[];
+}
 
-export const LANGGRAPH_JSON = {
-    node_version: '20',
-    graphs: { agent: './.maw/graph.ts:graph' },
-    env: '.env',
-    dependencies: ['.'],
-} as const;
+export type LanggraphSub = 'dev' | 'start';
 
 const exists = async (file: string): Promise<boolean> => {
     try {
@@ -27,6 +34,43 @@ const exists = async (file: string): Promise<boolean> => {
         return true;
     } catch {
         return false;
+    }
+};
+
+const createLanggraphJson = (
+    name: string,
+    graph: string,
+    env: string,
+    dependencies?: readonly string[],
+): LanggraphConfig => {
+    const cfg: LanggraphConfig = {
+        node_version: NODE,
+        graphs: { [name]: graph },
+        env,
+    };
+
+    if (dependencies) {
+        cfg.dependencies = [...dependencies];
+    }
+
+    return cfg;
+};
+
+export const createWorkflowLanggraphJson = (name: string): LanggraphConfig => {
+    return createLanggraphJson(name, WORKFLOW_GRAPH, WORKFLOW_ENV);
+};
+
+const createRootLanggraphJson = (): LanggraphConfig => {
+    return createLanggraphJson('agent', ROOT_GRAPH, ROOT_ENV, ROOT_DEPS);
+};
+
+export const ensureWorkflowFiles = async (dir: string): Promise<void> => {
+    for (const name of WORKFLOW_FILES) {
+        const file = join(dir, name);
+
+        if (!(await exists(file))) {
+            throw new Error(`Workflow file not found: ${file}`);
+        }
     }
 };
 
@@ -55,7 +99,7 @@ export const ensureLanggraphJson = async (root: string): Promise<void> => {
         return;
     }
 
-    await writeFile(file, `${JSON.stringify(LANGGRAPH_JSON, null, 4)}\n`);
+    await writeFile(file, `${JSON.stringify(createRootLanggraphJson(), null, 4)}\n`);
 };
 
 export const spawnLanggraph = async (sub: LanggraphSub, args: readonly string[]): Promise<number> => {

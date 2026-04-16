@@ -5,13 +5,14 @@ import { dirname, join } from 'node:path';
 const FILE = 'langgraph.json';
 const PKG = '@langchain/langgraph-cli';
 const BIN = 'langgraphjs';
+const NODE = '20';
+const ROOT_ENV = '.env';
+const ROOT_GRAPH = './.maw/graph.ts:graph';
+const ROOT_DEPS = ['.'];
+const WORKFLOW_ENV = '../../../.env';
+const WORKFLOW_GRAPH = './graph.ts:graph';
+const WORKFLOW_FILES = ['graph.ts', 'config.json', FILE];
 const req = createRequire(import.meta.url);
-export const LANGGRAPH_JSON = {
-    node_version: '20',
-    graphs: { agent: './.maw/graph.ts:graph' },
-    env: '.env',
-    dependencies: ['.'],
-};
 const exists = async (file) => {
     try {
         await access(file);
@@ -19,6 +20,31 @@ const exists = async (file) => {
     }
     catch {
         return false;
+    }
+};
+const createLanggraphJson = (name, graph, env, dependencies) => {
+    const cfg = {
+        node_version: NODE,
+        graphs: { [name]: graph },
+        env,
+    };
+    if (dependencies) {
+        cfg.dependencies = [...dependencies];
+    }
+    return cfg;
+};
+export const createWorkflowLanggraphJson = (name) => {
+    return createLanggraphJson(name, WORKFLOW_GRAPH, WORKFLOW_ENV);
+};
+const createRootLanggraphJson = () => {
+    return createLanggraphJson('agent', ROOT_GRAPH, ROOT_ENV, ROOT_DEPS);
+};
+export const ensureWorkflowFiles = async (dir) => {
+    for (const name of WORKFLOW_FILES) {
+        const file = join(dir, name);
+        if (!(await exists(file))) {
+            throw new Error(`Workflow file not found: ${file}`);
+        }
     }
 };
 const resolveBin = async () => {
@@ -39,7 +65,7 @@ export const ensureLanggraphJson = async (root) => {
     if (await exists(file)) {
         return;
     }
-    await writeFile(file, `${JSON.stringify(LANGGRAPH_JSON, null, 4)}\n`);
+    await writeFile(file, `${JSON.stringify(createRootLanggraphJson(), null, 4)}\n`);
 };
 export const spawnLanggraph = async (sub, args) => {
     const file = await resolveBin();

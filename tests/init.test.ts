@@ -116,7 +116,13 @@ describe('maw-cli init', () => {
         expect(await readFile(join(root, '.maw/graphs/docs-agent/graph.ts'), 'utf8')).toContain(
             "import { createGraph } from 'docs-agent';",
         );
-        expect(await exists(join(root, '.maw/graphs/docs-agent/langgraph.json'))).toBe(true);
+        expect(await readJson(join(root, '.maw/graphs/docs-agent/langgraph.json'))).toEqual({
+            node_version: '20',
+            graphs: {
+                'docs-agent': './graph.ts:graph',
+            },
+            env: '../../../.env',
+        });
         expect(await exists(join(root, '.maw/config.json'))).toBe(false);
         expect(await exists(join(root, '.maw/graph.ts'))).toBe(false);
         expect(await exists(join(root, 'langgraph.json'))).toBe(false);

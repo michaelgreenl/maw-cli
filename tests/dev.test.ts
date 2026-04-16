@@ -2,7 +2,6 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runDev } from '../src/commands/dev.js';
-import { LANGGRAPH_JSON } from '../src/utils/langgraph.js';
 import { captureStderr, cleanupRoots, createRoot, writeConfig } from './support.js';
 
 describe('runDev', () => {
@@ -45,9 +44,16 @@ describe('runDev', () => {
 
         await expect(runDev([], root, async () => 0)).resolves.toBe(0);
 
-        const cfg = JSON.parse(await readFile(join(root, 'langgraph.json'), 'utf8')) as typeof LANGGRAPH_JSON;
+        const cfg = JSON.parse(await readFile(join(root, 'langgraph.json'), 'utf8')) as Record<string, unknown>;
 
-        expect(cfg).toEqual(LANGGRAPH_JSON);
+        expect(cfg).toEqual({
+            node_version: '20',
+            graphs: {
+                agent: './.maw/graph.ts:graph',
+            },
+            env: '.env',
+            dependencies: ['.'],
+        });
     });
 
     it('treats env-like config strings as literal values before launching langgraph', async () => {
