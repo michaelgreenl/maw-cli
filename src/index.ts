@@ -39,7 +39,7 @@ export const formatHelp = (): string =>
     ].join('\n');
 
 export const runCli = async (argv: readonly string[] = process.argv.slice(2)): Promise<number> => {
-    if (argv.length === 0 || HELP_FLAGS.has(argv[0])) {
+    if (argv[0] === undefined || HELP_FLAGS.has(argv[0])) {
         process.stdout.write(`${formatHelp()}\n`);
         return 0;
     }
