@@ -1,8 +1,5 @@
-const toMessage = (err) => {
-    return err instanceof Error ? err.message : String(err);
-};
 export const printError = (err) => {
-    process.stderr.write(`${toMessage(err)}\n`);
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
 };
 export const createPlaceholderCommand = (name, summary) => ({

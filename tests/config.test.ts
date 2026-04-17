@@ -8,13 +8,11 @@ const roots: string[] = [];
 type Reader = (root: string) => Promise<unknown>;
 
 const load = async (): Promise<Reader> => {
-    const mod = (await import('../src/index.js')) as {
-        readConfig?: Reader;
-    };
+    const mod = await import('../src/index.js');
 
     expect(mod.readConfig).toBeTypeOf('function');
 
-    return mod.readConfig as Reader;
+    return mod.readConfig;
 };
 
 const createRoot = async (): Promise<string> => {

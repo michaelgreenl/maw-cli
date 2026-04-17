@@ -12,10 +12,6 @@ const WORKFLOW_GRAPH = './graph.ts:graph';
 const WORKFLOW_FILES = ['graph.ts', 'config.json', FILE] as const;
 const req = createRequire(import.meta.url);
 
-type Manifest = {
-    bin?: string | Record<string, string>;
-};
-
 export interface LanggraphConfig {
     node_version: string;
     graphs: Record<string, string>;
@@ -23,43 +19,21 @@ export interface LanggraphConfig {
     dependencies?: readonly string[];
 }
 
-const exists = async (file: string): Promise<boolean> => {
-    try {
-        await access(file);
-        return true;
-    } catch {
-        return false;
-    }
-};
-
-const createLanggraphJson = (
-    name: string,
-    graph: string,
-    env: string,
-    dependencies?: readonly string[],
-): LanggraphConfig => {
-    const cfg: LanggraphConfig = {
-        node_version: NODE,
-        graphs: { [name]: graph },
-        env,
-    };
-
-    if (dependencies) {
-        cfg.dependencies = [...dependencies];
-    }
-
-    return cfg;
-};
-
 export const createWorkflowLanggraphJson = (name: string): LanggraphConfig => {
-    return createLanggraphJson(name, WORKFLOW_GRAPH, WORKFLOW_ENV);
+    return {
+        node_version: NODE,
+        graphs: { [name]: WORKFLOW_GRAPH },
+        env: WORKFLOW_ENV,
+    };
 };
 
 export const ensureWorkflowFiles = async (dir: string): Promise<void> => {
     for (const name of WORKFLOW_FILES) {
         const file = join(dir, name);
 
-        if (!(await exists(file))) {
+        try {
+            await access(file);
+        } catch {
             throw new Error(`Workflow file not found: ${file}`);
         }
     }
@@ -67,17 +41,26 @@ export const ensureWorkflowFiles = async (dir: string): Promise<void> => {
 
 const resolveBin = async (): Promise<string> => {
     const file = req.resolve(`${PKG}/package.json`);
-    const manifest = JSON.parse(await readFile(file, 'utf8')) as Manifest;
+    const manifest: unknown = JSON.parse(await readFile(file, 'utf8'));
     const dir = dirname(file);
+    const binField = typeof manifest === 'object' && manifest !== null && 'bin' in manifest ? manifest.bin : undefined;
 
-    if (typeof manifest.bin === 'string') {
-        return join(dir, manifest.bin);
+    if (typeof binField === 'string') {
+        return join(dir, binField);
     }
 
-    const bin = manifest.bin?.[BIN] ?? Object.values(manifest.bin ?? {}).find((value) => typeof value === 'string');
+    if (typeof binField === 'object' && binField !== null) {
+        for (const [name, value] of Object.entries(binField)) {
+            if (name === BIN && typeof value === 'string') {
+                return join(dir, value);
+            }
+        }
 
-    if (bin) {
-        return join(dir, bin);
+        const bin = Object.values(binField).find((value): value is string => typeof value === 'string');
+
+        if (bin) {
+            return join(dir, bin);
+        }
     }
 
     throw new Error(`Unable to resolve ${BIN} from ${PKG}.`);

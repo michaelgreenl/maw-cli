@@ -13,18 +13,6 @@ const parseString = (value, field) => {
     }
     return value;
 };
-const parseBoolean = (value, field) => {
-    if (typeof value !== 'boolean') {
-        throw invalid(field);
-    }
-    return value;
-};
-const parseNumber = (value, field) => {
-    if (typeof value !== 'number') {
-        throw invalid(field);
-    }
-    return value;
-};
 const parseConfig = (value) => {
     if (!isRecord(value)) {
         throw invalid('root');
@@ -37,19 +25,25 @@ const parseConfig = (value) => {
     if (!isRecord(templates)) {
         throw invalid('templates');
     }
+    if (typeof openviking.enabled !== 'boolean') {
+        throw invalid('openviking.enabled');
+    }
+    if (typeof openviking.port !== 'number') {
+        throw invalid('openviking.port');
+    }
     return {
         workspace: parseString(value.workspace, 'workspace'),
         openviking: {
-            enabled: parseBoolean(openviking.enabled, 'openviking.enabled'),
+            enabled: openviking.enabled,
             host: parseString(openviking.host, 'openviking.host'),
-            port: parseNumber(openviking.port, 'openviking.port'),
+            port: openviking.port,
         },
         templates: {
             customPath: parseString(templates.customPath, 'templates.customPath'),
         },
     };
 };
-const loadConfig = async (root) => {
+export const ensureConfig = async (root) => {
     const file = join(root, FILE);
     try {
         await access(file);
@@ -57,14 +51,18 @@ const loadConfig = async (root) => {
     catch {
         throw new Error(`Config file not found: ${file}`);
     }
-    const cfg = parseConfig(JSON.parse(await readFile(file, 'utf8')));
-    return { file, cfg };
-};
-export const ensureConfig = async (root) => {
-    const { file } = await loadConfig(root);
+    const raw = JSON.parse(await readFile(file, 'utf8'));
+    parseConfig(raw);
     return file;
 };
 export const readConfig = async (root) => {
-    const { cfg } = await loadConfig(root);
-    return cfg;
+    const file = join(root, FILE);
+    try {
+        await access(file);
+    }
+    catch {
+        throw new Error(`Config file not found: ${file}`);
+    }
+    const raw = JSON.parse(await readFile(file, 'utf8'));
+    return parseConfig(raw);
 };

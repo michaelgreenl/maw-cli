@@ -5,12 +5,8 @@ export interface CommandDefinition<Name extends string = string> {
     run: (args: readonly string[]) => Promise<number>;
 }
 
-const toMessage = (err: unknown): string => {
-    return err instanceof Error ? err.message : String(err);
-};
-
 export const printError = (err: unknown): number => {
-    process.stderr.write(`${toMessage(err)}\n`);
+    process.stderr.write(`${err instanceof Error ? err.message : String(err)}\n`);
     return 1;
 };
 

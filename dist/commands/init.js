@@ -9,12 +9,16 @@ const IGNORED_PACKAGE = 'maw-cli';
 const GITIGNORE_ENTRY = '.maw/openviking/';
 const GRAPH_ROOT = '.maw/graphs';
 const PROJECT_DIRS = ['.maw/templates', '.maw/graphs'];
+const OV_PORT = 1933;
+const EMBEDDING_DIMENSION = 3072;
+const EMBEDDING_CONCURRENCY = 10;
+const VLM_CONCURRENCY = 100;
 const PROJECT_CFG = {
     workspace: '.',
     openviking: {
         enabled: true,
         host: 'localhost',
-        port: 1933,
+        port: OV_PORT,
     },
     templates: {
         customPath: '.maw/templates',
@@ -33,44 +37,46 @@ const OV_CFG = {
             api_base: 'https://api.openai.com/v1',
             api_key: '${OPENAI_API_KEY}',
             provider: 'openai',
-            dimension: 3072,
+            dimension: EMBEDDING_DIMENSION,
             model: 'text-embedding-3-large',
         },
-        max_concurrent: 10,
+        max_concurrent: EMBEDDING_CONCURRENCY,
     },
     vlm: {
         api_base: 'https://api.openai.com/v1',
         api_key: '${OPENAI_API_KEY}',
         provider: 'openai',
         model: 'gpt-4o',
-        max_concurrent: 100,
+        max_concurrent: VLM_CONCURRENCY,
     },
 };
 const dependencyFields = ['dependencies', 'devDependencies', 'optionalDependencies'];
 const formatJson = (value) => `${JSON.stringify(value, null, 4)}\n`;
-const fileExists = async (filePath) => {
-    try {
-        await access(filePath);
-        return true;
-    }
-    catch {
-        return false;
-    }
-};
-const readJson = async (filePath) => {
-    const content = await readFile(filePath, 'utf8');
-    return JSON.parse(content);
-};
-const readPackageJson = (root) => {
-    return readJson(join(root, PACKAGE_JSON));
-};
 const isRecord = (value) => {
-    return typeof value === 'object' && value !== null;
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+};
+const parsePackageJson = (value) => {
+    if (!isRecord(value)) {
+        throw new Error(`Invalid ${PACKAGE_JSON}.`);
+    }
+    return value;
+};
+const parseWorkflowFiles = (value, pkg) => {
+    if (!isRecord(value) || typeof value['graph.ts'] !== 'string' || typeof value['config.json'] !== 'string') {
+        throw new Error(`Invalid scaffold files from ${pkg}.`);
+    }
+    return {
+        'graph.ts': value['graph.ts'],
+        'config.json': value['config.json'],
+    };
 };
 const getInstalledDependencyNames = (pkg) => {
     const names = new Set();
     for (const field of dependencyFields) {
-        const deps = pkg[field] ?? {};
+        const deps = pkg[field];
+        if (!isRecord(deps)) {
+            continue;
+        }
         for (const name of Object.keys(deps)) {
             if (name !== IGNORED_PACKAGE) {
                 names.add(name);
@@ -80,105 +86,90 @@ const getInstalledDependencyNames = (pkg) => {
     return [...names];
 };
 const resolveScaffoldExport = (exportsField) => {
-    const entry = exportsField?.[SCAFFOLD_EXPORT];
+    if (!isRecord(exportsField)) {
+        return undefined;
+    }
+    const entry = exportsField[SCAFFOLD_EXPORT];
     if (typeof entry === 'string') {
         return entry;
     }
-    if (!entry || typeof entry !== 'object') {
+    if (!isRecord(entry)) {
         return undefined;
     }
-    const conditions = entry;
-    if (typeof conditions.import === 'string') {
-        return conditions.import;
+    if (typeof entry.import === 'string') {
+        return entry.import;
     }
-    if (typeof conditions.default === 'string') {
-        return conditions.default;
+    if (typeof entry.default === 'string') {
+        return entry.default;
     }
-    if (typeof conditions.require === 'string') {
-        return conditions.require;
+    if (typeof entry.require === 'string') {
+        return entry.require;
     }
     return undefined;
-};
-const isWorkflowModule = (value) => typeof value.scaffold?.packageName === 'string' &&
-    typeof value.scaffold?.workflow === 'string' &&
-    typeof value.createScaffoldFiles === 'function';
-const isWorkflowFiles = (value) => {
-    if (!isRecord(value)) {
-        return false;
-    }
-    return typeof value['graph.ts'] === 'string' && typeof value['config.json'] === 'string';
-};
-const createProjectFiles = () => ({
-    'maw.json': formatJson(PROJECT_CFG),
-    '.maw/ov.conf': formatJson(OV_CFG),
-});
-const workflowFiles = (name, files) => {
-    const dir = join(GRAPH_ROOT, name);
-    return {
-        [join(dir, 'graph.ts')]: files['graph.ts'],
-        [join(dir, 'config.json')]: files['config.json'],
-        [join(dir, 'langgraph.json')]: formatJson(createWorkflowLanggraphJson(name)),
-    };
 };
 const tryLoadWorkflowModule = async (requireFromRoot, packageName) => {
     try {
         const manifestPath = requireFromRoot.resolve(`${packageName}/${PACKAGE_JSON}`);
         const packageDir = dirname(manifestPath);
-        const manifest = await readJson(manifestPath);
+        const manifest = parsePackageJson(JSON.parse(await readFile(manifestPath, 'utf8')));
         const scaffoldExport = resolveScaffoldExport(manifest.exports);
         if (!scaffoldExport) {
             return null;
         }
         const modulePath = join(packageDir, scaffoldExport);
-        const loaded = (await import(pathToFileURL(modulePath).href));
-        return isWorkflowModule(loaded) ? loaded : null;
+        const loaded = await import(pathToFileURL(modulePath).href);
+        if (!isRecord(loaded) || !isRecord(loaded.scaffold)) {
+            return null;
+        }
+        if (typeof loaded.scaffold.packageName !== 'string' ||
+            typeof loaded.scaffold.workflow !== 'string' ||
+            typeof loaded.createScaffoldFiles !== 'function') {
+            return null;
+        }
+        const create = loaded.createScaffoldFiles;
+        const pkg = loaded.scaffold.packageName;
+        const workflow = loaded.scaffold.workflow;
+        return {
+            scaffold: {
+                packageName: pkg,
+                workflow,
+            },
+            createScaffoldFiles: async () => {
+                return parseWorkflowFiles(await create(), pkg);
+            },
+        };
     }
     catch {
         return null;
     }
 };
-const sortWorkflows = (mods) => {
-    return mods.sort((left, right) => {
+export const loadWorkflows = async (root) => {
+    const pkg = parsePackageJson(JSON.parse(await readFile(join(root, PACKAGE_JSON), 'utf8')));
+    const requireFromRoot = createRequire(join(root, PACKAGE_JSON));
+    const dependencyNames = getInstalledDependencyNames(pkg);
+    const matches = await Promise.all(dependencyNames.map((name) => tryLoadWorkflowModule(requireFromRoot, name)));
+    const mods = matches
+        .filter((mod) => mod !== null)
+        .sort((left, right) => {
         const byWorkflow = left.scaffold.workflow.localeCompare(right.scaffold.workflow);
         if (byWorkflow !== 0) {
             return byWorkflow;
         }
         return left.scaffold.packageName.localeCompare(right.scaffold.packageName);
     });
-};
-const findDuplicateWorkflow = (mods) => {
     const seen = new Set();
     for (const mod of mods) {
         const name = mod.scaffold.workflow;
         if (seen.has(name)) {
-            return name;
+            throw new Error(`Duplicate workflow name: ${name}`);
         }
         seen.add(name);
     }
-    return null;
-};
-export const loadWorkflows = async (root) => {
-    const pkg = await readPackageJson(root);
-    const requireFromRoot = createRequire(join(root, PACKAGE_JSON));
-    const dependencyNames = getInstalledDependencyNames(pkg);
-    const matches = await Promise.all(dependencyNames.map((name) => tryLoadWorkflowModule(requireFromRoot, name)));
-    const mods = sortWorkflows(matches.filter((mod) => mod !== null));
-    const duplicate = findDuplicateWorkflow(mods);
-    if (duplicate) {
-        throw new Error(`Duplicate workflow name: ${duplicate}`);
-    }
     return mods;
-};
-const readWorkflowFiles = async (workflow) => {
-    const files = await workflow.createScaffoldFiles();
-    if (isWorkflowFiles(files)) {
-        return files;
-    }
-    throw new Error(`Invalid scaffold files from ${workflow.scaffold.packageName}.`);
 };
 const mergeGitignore = async (root, entries) => {
     const gitignorePath = join(root, '.gitignore');
-    const existing = (await fileExists(gitignorePath)) ? await readFile(gitignorePath, 'utf8') : '';
+    const existing = await readFile(gitignorePath, 'utf8').catch(() => '');
     const lines = new Set(existing.split('\n').filter(Boolean));
     for (const entry of entries) {
         lines.add(entry);
@@ -188,40 +179,46 @@ const mergeGitignore = async (root, entries) => {
 const writeMissingFiles = async (root, files) => {
     for (const [relativePath, content] of Object.entries(files)) {
         const filePath = join(root, relativePath);
-        if (await fileExists(filePath)) {
+        try {
+            await access(filePath);
             continue;
         }
-        await mkdir(dirname(filePath), { recursive: true });
-        await writeFile(filePath, content);
-    }
-};
-const ensureDirs = async (root, dirs) => {
-    for (const dir of dirs) {
-        await mkdir(join(root, dir), { recursive: true });
+        catch {
+            await mkdir(dirname(filePath), { recursive: true });
+            await writeFile(filePath, content);
+        }
     }
 };
 const writeWorkflows = async (root, mods) => {
     for (const mod of mods) {
         const name = mod.scaffold.workflow;
+        const dir = join(GRAPH_ROOT, name);
+        const files = await mod.createScaffoldFiles();
         await mkdir(join(root, GRAPH_ROOT, name), { recursive: true });
-        await writeMissingFiles(root, workflowFiles(name, await readWorkflowFiles(mod)));
+        await writeMissingFiles(root, {
+            [join(dir, 'graph.ts')]: files['graph.ts'],
+            [join(dir, 'config.json')]: files['config.json'],
+            [join(dir, 'langgraph.json')]: formatJson(createWorkflowLanggraphJson(name)),
+        });
     }
-};
-const workflowNames = (mods) => {
-    return mods.map((mod) => mod.scaffold.workflow).join(', ');
 };
 export const runInit = async (_args, root = process.cwd()) => {
     try {
         const mods = await loadWorkflows(root);
-        await ensureDirs(root, PROJECT_DIRS);
-        await writeMissingFiles(root, createProjectFiles());
+        for (const dir of PROJECT_DIRS) {
+            await mkdir(join(root, dir), { recursive: true });
+        }
+        await writeMissingFiles(root, {
+            'maw.json': formatJson(PROJECT_CFG),
+            '.maw/ov.conf': formatJson(OV_CFG),
+        });
         await mergeGitignore(root, [GITIGNORE_ENTRY]);
         if (mods.length === 0) {
             process.stderr.write('Warning: initialized project MAW scaffold without workflows. Install a workflow package and rerun `maw-cli init`.\n');
             return 0;
         }
         await writeWorkflows(root, mods);
-        process.stdout.write(`Initialized project MAW scaffold for workflows: ${workflowNames(mods)}.\n`);
+        process.stdout.write(`Initialized project MAW scaffold for workflows: ${mods.map((mod) => mod.scaffold.workflow).join(', ')}.\n`);
         return 0;
     }
     catch (error) {

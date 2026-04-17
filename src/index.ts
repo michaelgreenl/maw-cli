@@ -14,7 +14,7 @@ export const COMMAND_NAMES = commandDefinitions.map((command) => command.name);
 
 export type CommandName = (typeof commandDefinitions)[number]['name'];
 
-const commandMap = new Map<CommandName, CommandDefinition<CommandName>>(
+const commandMap = new Map<string, CommandDefinition<CommandName>>(
     commandDefinitions.map((command) => [command.name, command]),
 );
 
@@ -27,7 +27,7 @@ export const parseCommandName = (argv: readonly string[]): CommandName | undefin
         return undefined;
     }
 
-    return commandMap.has(candidate as CommandName) ? (candidate as CommandName) : undefined;
+    return commandMap.get(candidate)?.name;
 };
 
 export const formatHelp = (): string =>
@@ -51,20 +51,19 @@ export const runCli = async (argv: readonly string[] = process.argv.slice(2)): P
         return 1;
     }
 
-    return commandMap.get(commandName)!.run(argv.slice(1));
-};
+    const command = commandMap.get(commandName);
 
-const isExecutedDirectly = (): boolean => {
-    const entryPoint = process.argv[1];
-
-    if (!entryPoint) {
-        return false;
+    if (!command) {
+        process.stderr.write(`Unknown command: ${commandName}\n\n${formatHelp()}\n`);
+        return 1;
     }
 
-    return import.meta.url === pathToFileURL(entryPoint).href;
+    return command.run(argv.slice(1));
 };
 
-if (isExecutedDirectly()) {
+const entry = process.argv[1];
+
+if (entry && import.meta.url === pathToFileURL(entry).href) {
     void runCli().then(
         (exitCode) => {
             process.exitCode = exitCode;

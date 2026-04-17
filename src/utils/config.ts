@@ -31,22 +31,6 @@ const parseString = (value: unknown, field: string): string => {
     return value;
 };
 
-const parseBoolean = (value: unknown, field: string): boolean => {
-    if (typeof value !== 'boolean') {
-        throw invalid(field);
-    }
-
-    return value;
-};
-
-const parseNumber = (value: unknown, field: string): number => {
-    if (typeof value !== 'number') {
-        throw invalid(field);
-    }
-
-    return value;
-};
-
 const parseConfig = (value: unknown): MawProjectConfig => {
     if (!isRecord(value)) {
         throw invalid('root');
@@ -63,12 +47,20 @@ const parseConfig = (value: unknown): MawProjectConfig => {
         throw invalid('templates');
     }
 
+    if (typeof openviking.enabled !== 'boolean') {
+        throw invalid('openviking.enabled');
+    }
+
+    if (typeof openviking.port !== 'number') {
+        throw invalid('openviking.port');
+    }
+
     return {
         workspace: parseString(value.workspace, 'workspace'),
         openviking: {
-            enabled: parseBoolean(openviking.enabled, 'openviking.enabled'),
+            enabled: openviking.enabled,
             host: parseString(openviking.host, 'openviking.host'),
-            port: parseNumber(openviking.port, 'openviking.port'),
+            port: openviking.port,
         },
         templates: {
             customPath: parseString(templates.customPath, 'templates.customPath'),
@@ -76,7 +68,7 @@ const parseConfig = (value: unknown): MawProjectConfig => {
     };
 };
 
-const loadConfig = async (root: string): Promise<{ file: string; cfg: MawProjectConfig }> => {
+export const ensureConfig = async (root: string): Promise<string> => {
     const file = join(root, FILE);
 
     try {
@@ -85,17 +77,22 @@ const loadConfig = async (root: string): Promise<{ file: string; cfg: MawProject
         throw new Error(`Config file not found: ${file}`);
     }
 
-    const cfg = parseConfig(JSON.parse(await readFile(file, 'utf8')) as unknown);
+    const raw: unknown = JSON.parse(await readFile(file, 'utf8'));
+    parseConfig(raw);
 
-    return { file, cfg };
-};
-
-export const ensureConfig = async (root: string): Promise<string> => {
-    const { file } = await loadConfig(root);
     return file;
 };
 
 export const readConfig = async (root: string): Promise<MawProjectConfig> => {
-    const { cfg } = await loadConfig(root);
-    return cfg;
+    const file = join(root, FILE);
+
+    try {
+        await access(file);
+    } catch {
+        throw new Error(`Config file not found: ${file}`);
+    }
+
+    const raw: unknown = JSON.parse(await readFile(file, 'utf8'));
+
+    return parseConfig(raw);
 };

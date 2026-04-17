@@ -44,25 +44,26 @@ export const createProject = async (prefix: string, deps: readonly WorkflowFixtu
     return root;
 };
 
-const createConfig = () => ({
-    workspace: '.',
-    openviking: { enabled: true, host: 'localhost', port: 1933 },
-    templates: {
-        customPath: '.maw/templates',
+export const writeConfig = async (
+    root: string,
+    cfg: unknown = {
+        workspace: '.',
+        openviking: { enabled: true, host: 'localhost', port: 1933 },
+        templates: {
+            customPath: '.maw/templates',
+        },
     },
-});
-
-export const writeConfig = async (root: string, cfg: unknown = createConfig()): Promise<void> => {
+): Promise<void> => {
     await mkdir(root, { recursive: true });
     await writeFile(join(root, 'maw.json'), JSON.stringify(cfg, null, 2));
 };
 
 export const captureStderr = (): { output: string[]; restore: () => void } => {
     const output: string[] = [];
-    const spy = vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: string | Uint8Array) => {
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: string | Uint8Array) => {
         output.push(String(chunk));
         return true;
-    }) as typeof process.stderr.write);
+    });
 
     return {
         output,
@@ -74,10 +75,10 @@ export const captureStderr = (): { output: string[]; restore: () => void } => {
 
 export const captureStdout = (): { output: string[]; restore: () => void } => {
     const output: string[] = [];
-    const spy = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: string | Uint8Array) => {
+    const spy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
         output.push(String(chunk));
         return true;
-    }) as typeof process.stdout.write);
+    });
 
     return {
         output,

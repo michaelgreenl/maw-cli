@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { loadWorkflows, runInit } from '../src/commands/init.js';
 import { captureStderr, captureStdout, cleanupRoots, createProject, createRoot, writePackage } from './support.js';
 
-const readJson = async <T>(file: string): Promise<T> => {
-    return JSON.parse(await readFile(file, 'utf8')) as T;
+const readJson = async (file: string): Promise<unknown> => {
+    return JSON.parse(await readFile(file, 'utf8'));
 };
 
 const exists = async (file: string): Promise<boolean> => {

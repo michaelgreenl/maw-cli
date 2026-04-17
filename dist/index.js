@@ -14,7 +14,7 @@ export const parseCommandName = (argv) => {
     if (!candidate || HELP_FLAGS.has(candidate)) {
         return undefined;
     }
-    return commandMap.has(candidate) ? candidate : undefined;
+    return commandMap.get(candidate)?.name;
 };
 export const formatHelp = () => [
     'Usage: maw-cli <command>',
@@ -32,16 +32,15 @@ export const runCli = async (argv = process.argv.slice(2)) => {
         process.stderr.write(`Unknown command: ${argv[0]}\n\n${formatHelp()}\n`);
         return 1;
     }
-    return commandMap.get(commandName).run(argv.slice(1));
-};
-const isExecutedDirectly = () => {
-    const entryPoint = process.argv[1];
-    if (!entryPoint) {
-        return false;
+    const command = commandMap.get(commandName);
+    if (!command) {
+        process.stderr.write(`Unknown command: ${commandName}\n\n${formatHelp()}\n`);
+        return 1;
     }
-    return import.meta.url === pathToFileURL(entryPoint).href;
+    return command.run(argv.slice(1));
 };
-if (isExecutedDirectly()) {
+const entry = process.argv[1];
+if (entry && import.meta.url === pathToFileURL(entry).href) {
     void runCli().then((exitCode) => {
         process.exitCode = exitCode;
     }, (error) => {
