@@ -1,19 +1,25 @@
 {
-  "extends": "@tsconfig/recommended",
-  "compilerOptions": {
-    "target": "ES2021",
-    "lib": ["ES2021"],
-    "module": "NodeNext",
-    "moduleResolution": "nodenext",
-    "esModuleInterop": true,
-    "declaration": true,
-    "noEmit": false,
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "outDir": "dist",
-    "types": ["node"]
-  },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist"]
+    "extends": "@tsconfig/recommended",
+    "compilerOptions": {
+        "target": "ES2021",
+        "lib": ["ES2021", "ES2022.Object", "DOM"],
+        "module": "NodeNext",
+        "moduleResolution": "nodenext",
+        "esModuleInterop": true,
+        "noImplicitReturns": true,
+        "declaration": true,
+        "noFallthroughCasesInSwitch": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "useDefineForClassFields": true,
+        "exactOptionalPropertyTypes": true,
+        "allowJs": true,
+        "strict": true,
+        "noUncheckedIndexedAccess": true,
+        "outDir": "dist",
+        "types": ["node"],
+        "resolveJsonModule": true
+    },
+    "include": ["src/**/*.ts"],
+    "exclude": ["node_modules", "dist"]
 }
