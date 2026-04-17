@@ -1,14 +1,11 @@
 import { spawn } from 'node:child_process';
-import { access, readFile, writeFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 const FILE = 'langgraph.json';
 const PKG = '@langchain/langgraph-cli';
 const BIN = 'langgraphjs';
 const NODE = '20';
-const ROOT_ENV = '.env';
-const ROOT_GRAPH = './.maw/graph.ts:graph';
-const ROOT_DEPS = ['.'];
 const WORKFLOW_ENV = '../../../.env';
 const WORKFLOW_GRAPH = './graph.ts:graph';
 const WORKFLOW_FILES = ['graph.ts', 'config.json', FILE];
@@ -36,9 +33,6 @@ const createLanggraphJson = (name, graph, env, dependencies) => {
 export const createWorkflowLanggraphJson = (name) => {
     return createLanggraphJson(name, WORKFLOW_GRAPH, WORKFLOW_ENV);
 };
-const createRootLanggraphJson = () => {
-    return createLanggraphJson('agent', ROOT_GRAPH, ROOT_ENV, ROOT_DEPS);
-};
 export const ensureWorkflowFiles = async (dir) => {
     for (const name of WORKFLOW_FILES) {
         const file = join(dir, name);
@@ -59,13 +53,6 @@ const resolveBin = async () => {
         return join(dir, bin);
     }
     throw new Error(`Unable to resolve ${BIN} from ${PKG}.`);
-};
-export const ensureLanggraphJson = async (root) => {
-    const file = join(root, FILE);
-    if (await exists(file)) {
-        return;
-    }
-    await writeFile(file, `${JSON.stringify(createRootLanggraphJson(), null, 4)}\n`);
 };
 export const spawnLanggraph = async (sub, args) => {
     const file = await resolveBin();

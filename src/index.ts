@@ -5,11 +5,10 @@ import { devCommand } from './commands/dev.js';
 import { initCommand } from './commands/init.js';
 import { ovIndexCommand } from './commands/ov-index.js';
 import { ovInitCommand } from './commands/ov-init.js';
-import { startCommand } from './commands/start.js';
 import { type CommandDefinition } from './commands/shared.js';
 export { readConfig, type MawProjectConfig } from './utils/config.js';
 
-const commandDefinitions = [initCommand, devCommand, startCommand, ovInitCommand, ovIndexCommand] as const;
+const commandDefinitions = [initCommand, devCommand, ovInitCommand, ovIndexCommand] as const;
 
 export const COMMAND_NAMES = commandDefinitions.map((command) => command.name);
 
@@ -36,7 +35,7 @@ export const formatHelp = (): string =>
         'Usage: maw-cli <command>',
         '',
         'Commands:',
-        ...commandDefinitions.map((command) => `  maw-cli ${command.name}  ${command.summary}`),
+        ...commandDefinitions.map((command) => `  maw-cli ${command.usage ?? command.name}  ${command.summary}`),
     ].join('\n');
 
 export const runCli = async (argv: readonly string[] = process.argv.slice(2)): Promise<number> => {

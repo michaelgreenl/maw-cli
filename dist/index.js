@@ -4,9 +4,8 @@ import { devCommand } from './commands/dev.js';
 import { initCommand } from './commands/init.js';
 import { ovIndexCommand } from './commands/ov-index.js';
 import { ovInitCommand } from './commands/ov-init.js';
-import { startCommand } from './commands/start.js';
 export { readConfig } from './utils/config.js';
-const commandDefinitions = [initCommand, devCommand, startCommand, ovInitCommand, ovIndexCommand];
+const commandDefinitions = [initCommand, devCommand, ovInitCommand, ovIndexCommand];
 export const COMMAND_NAMES = commandDefinitions.map((command) => command.name);
 const commandMap = new Map(commandDefinitions.map((command) => [command.name, command]));
 const HELP_FLAGS = new Set(['-h', '--help', 'help']);
@@ -21,7 +20,7 @@ export const formatHelp = () => [
     'Usage: maw-cli <command>',
     '',
     'Commands:',
-    ...commandDefinitions.map((command) => `  maw-cli ${command.name}  ${command.summary}`),
+    ...commandDefinitions.map((command) => `  maw-cli ${command.usage ?? command.name}  ${command.summary}`),
 ].join('\n');
 export const runCli = async (argv = process.argv.slice(2)) => {
     if (argv.length === 0 || HELP_FLAGS.has(argv[0])) {
