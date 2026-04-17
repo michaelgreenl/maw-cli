@@ -6,16 +6,15 @@
 
 ### KEY PERSONA CHECK
 
-> **LEAVE THE SYCOPHANT PERSONA AT THE DOOR**.
-
-- You're a tool, not a girlfriend. You're hear to help, not stroke my ego.
+> **LEAVE THE SYCOPHANT PERSONA AT THE DOOR**. 
+- You're a tool, not a girlfriend. You're here to help, not stroke my ego.
 
 #### Your Role
 
 - Your role relative to the user is a teammate.
     - Teams work together and move as one.
     - A bad team member is one that does things without ensuring the rest of the team is on the same page first.
-- If you have valid concerns for why a path you've been directed to take should not be taken;
+- If you have valid concerns about why a path you've been directed to take should not be taken, or if plans you've been told to write contain elements that warrant reconsideration:
     - **NEVER** continue until you've surfaced those concerns with the user.
     - **NEVER** assume the correct path and continue on your own.
 
@@ -24,7 +23,7 @@
 - **NEVER** read, write, output, or inspect `.env` files or environment variables.
 - If a problem appears env-related, report the symptoms and ask the user for guidance.
 - **NEVER** log or echo env var names or values.
-- **THE \***ONLY**\* EXCEPTION:** you are allowed to read and write to `.env.example` files.
+- **THE ***ONLY*** EXCEPTION:** you are allowed to read and write to `.env.example` files.
     - `.env.example` files should never contain anything but comments and undefined variable stubs.
     - all other `.env` files (and `.env.*`) **DO NOT** fall under this exception
 
@@ -133,7 +132,11 @@ Every time you touch code, look for **at least one small improvement**:
 - Remove dead code or unused imports
 - Replace a magic number with a named constant
 - Inline a single-use value
+- Inline a single-use helper/wrapper function -> triggers `clean-functions`
 - Remove unnecessary destructuring
+- Replace `any` with `unknown` or a precise type -> triggers `clean-types`
+- Remove a non-null assertion (`!`) or unjustified `as` cast -> triggers `clean-types`
+- Drop a redundant type annotation on a value the compiler can infer -> triggers `clean-types`
 
 ##### Deeper Improvements (When Time Allows)
 
@@ -141,6 +144,9 @@ Every time you touch code, look for **at least one small improvement**:
 - Remove duplication (DRY) -> triggers `clean-general`
 - Add missing boundary checks
 - Improve test coverage -> triggers `clean-tests`
+- Convert an "optional field bag" to a discriminated union -> triggers `clean-types`
+- Replace an `enum` with a string literal union -> triggers `clean-types`
+- Brand a domain primitive that is being mixed up with other strings/numbers -> triggers `clean-types`
 
 #### The Rule in Practice
 
@@ -180,19 +186,6 @@ export function taxed(values: number[]): number[] {
 - Flag behavior split into separate functions (F3)
 - Named constant for magic number (G25)
 - Redundant comment removed (C3)
-
-#### Skill Orchestration
-
-This skill coordinates with specialized skills based on what you're doing:
-
-| Task                                 | Trigger Skill                    |
-| ------------------------------------ | -------------------------------- |
-| Writing/reviewing any TypeScript     | `typescript-clean-code` (master) |
-| Naming variables, functions, classes | `clean-names`                    |
-| Writing or editing comments          | `clean-comments`                 |
-| Creating or refactoring functions    | `clean-functions`                |
-| Reviewing code quality               | `clean-general`                  |
-| Writing or reviewing tests           | `clean-tests`                    |
 
 #### The Mindset
 
@@ -299,7 +292,7 @@ export function createUser(
     // ...
 }
 
-// Good - use a parameter object type
+// Good - use a parameter object type (see TY6: interface for object shapes)
 export interface CreateUserInput {
     name: string;
     email: string;
@@ -319,7 +312,7 @@ More than 3 arguments means your function is doing too much or needs a data stru
 
 #### F2: No Output Arguments
 
-Don't modify arguments as side effects. Return values instead.
+Don't modify arguments as side effects. Return values instead. Mark inputs `readonly` at the boundary (TY9) so the compiler enforces it.
 
 ```ts
 // Bad - modifies argument
@@ -361,6 +354,378 @@ export function renderProductionPage(): string {
 
 If it's not called, delete it. No "just in case" code. Git preserves history.
 
+#### F5: Do Not Extract Single-Use Helpers, Wrappers, or Predicates
+
+A helper, wrapper, adapter, or any "small named function" earns its place by being reused. A function that exists only to give a one-liner a name is not a helper - it is indirection. It adds a jump, a scroll, a new identifier, and a new file location for future readers to track, without removing any duplication.
+
+**The Rule of Three, adapted:**
+
+- **General helpers/wrappers**: do not extract until the exact same logic appears **more than twice** (i.e., 3+ call sites). Two occurrences are a coincidence, three are a pattern.
+- **Type guards (`value is T` predicates)**: inline the check unless it is **duplicated more than once** (i.e., 2+ call sites). The `is T` predicate narrowing is the only real benefit, and one narrowing site does not justify a new function - a local `typeof`/`instanceof` check narrows just as well.
+- **Before extracting anything, grep the codebase for existing helpers/utils.** Duplicating a helper that already exists in a shared `utils/` or `lib/` module is worse than inlining, because now two sources of truth will drift.
+
+```ts
+// Bad - single-use wrapper adds a hop for nothing
+const readPackageJson = (root: string): Promise<PackageJson> => {
+    return readJson<PackageJson>(join(root, PACKAGE_JSON));
+};
+
+export const loadWorkflows = async (root: string): Promise<WorkflowModule[]> => {
+    const pkg = await readPackageJson(root);
+    // ...
+};
+
+// Good - inlined at the one call site
+export const loadWorkflows = async (root: string): Promise<WorkflowModule[]> => {
+    const pkg = await readJson<PackageJson>(join(root, PACKAGE_JSON));
+    // ...
+};
+```
+
+```ts
+// Bad - single-use type guard
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+    return typeof value === 'object' && value !== null;
+};
+
+function handle(value: unknown): void {
+    if (!isRecord(value)) return;
+    value.foo;
+}
+
+// Good - inline; narrowing still works, no new identifier
+function handle(value: unknown): void {
+    if (typeof value !== 'object' || value === null) return;
+    // value is narrowed to object (non-null) here
+    (value as Record<string, unknown>).foo;
+}
+
+// Good - extracted only because it is used in 2+ places AND carries the `is T` predicate
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null;
+
+function a(value: unknown): void { if (isRecord(value)) { /* ... */ } }
+function b(value: unknown): void { if (isRecord(value)) { /* ... */ } }
+```
+
+**Before extracting, ask:**
+
+1. Is the same logic already written in this codebase (check `utils/`, `lib/`, `shared/`, etc.)? If yes, use the existing one.
+2. Will this be called at least 3 times (2 for type guards)?
+3. Does the name reveal intent that the inline expression hides? (e.g., a domain-meaningful predicate)
+4. Does the extracted function bind a generic parameter or enforce a non-trivial invariant the caller would otherwise get wrong?
+
+If the answer to 1 is "yes, elsewhere" - **do not duplicate**. If the answer to 2, 3, and 4 is "no" - **inline it**.
+
+**Why this matters:** a file with twelve three-line helpers, each called once, forces a reader to context-switch twelve times to understand a single top-level function. The abstraction tax is paid by every future reader, not by the author. Helpers compound into maintainability only when the reuse is real.
+
+---
+
+### Clean Types
+
+TypeScript's type system exists to solve type problems. Reach for it first. Do not re-implement in runtime code what the compiler can already prove.
+
+#### TY1: Never Use `any` - Use `unknown`
+
+`any` disables the type system. `unknown` keeps it on and forces you to narrow before use.
+
+```ts
+// Bad
+function parse(raw: any): User {
+    return { name: raw.name, age: raw.age };
+}
+
+// Good
+function parse(raw: unknown): User {
+    if (
+        typeof raw === 'object' &&
+        raw !== null &&
+        'name' in raw &&
+        typeof raw.name === 'string' &&
+        'age' in raw &&
+        typeof raw.age === 'number'
+    ) {
+        return { name: raw.name, age: raw.age };
+    }
+
+    throw new Error('Invalid user');
+}
+```
+
+The only acceptable `any` is in a third-party type declaration you do not control. Never write `any` in new code.
+
+#### TY2: Trust Inference, Annotate Boundaries
+
+Annotate what crosses a boundary (exported functions, public APIs, parameters). Let inference do the rest.
+
+```ts
+// Bad - noise, the annotations add nothing
+const count: number = 0;
+const names: string[] = ['a', 'b'];
+const user: User = getUser();
+
+// Good - inferred
+const count = 0;
+const names = ['a', 'b'];
+const user = getUser();
+
+// Good - boundaries are annotated
+export function total(items: Item[]): number {
+    return items.reduce((sum, item) => sum + item.price, 0);
+}
+```
+
+Exception: annotate when inference widens incorrectly (see TY8) or when the inferred type is too broad to document intent.
+
+#### TY3: Avoid Type Assertions (`as`)
+
+`as` tells the compiler "trust me." You are almost always wrong. Narrow instead. Like G16, this is a rule about not obscuring intent - an assertion hides the real shape of your data.
+
+```ts
+// Bad - lies to the compiler
+const user = JSON.parse(raw) as User;
+const input = document.getElementById('email') as HTMLInputElement;
+
+// Good - narrow and validate
+const parsed: unknown = JSON.parse(raw);
+const user = parseUser(parsed); // validates and returns User
+
+// Good - guard the DOM cast
+const element = document.getElementById('email');
+if (!(element instanceof HTMLInputElement)) {
+    throw new Error('email input missing');
+}
+element.value; // narrowed
+```
+
+Acceptable uses of `as`:
+
+- `as const` for literal narrowing
+- `as unknown as T` at a single, audited serialization boundary
+- Narrowing from `unknown` to a type you have already validated at runtime
+
+#### TY4: Never Use `!` (Non-Null Assertion)
+
+The non-null assertion is a silent `as`. Handle the null case.
+
+```ts
+// Bad
+const user = users.find((user) => user.id === id)!;
+user.name;
+
+// Good
+const user = users.find((user) => user.id === id);
+if (!user) throw new Error(`user ${id} not found`);
+user.name;
+
+// Good - optional chaining when absence is valid
+const name = users.find((user) => user.id === id)?.name ?? 'anonymous';
+```
+
+#### TY5: Use Discriminated Unions, Not Optional Bags
+
+If fields are meaningful only in certain states, model the states directly. This is the type-level version of G23 (polymorphism over if/else): make illegal states unrepresentable and the branches fall out naturally.
+
+```ts
+// Bad - every field optional, no state is enforced
+interface Request {
+    status: 'loading' | 'success' | 'error';
+    data?: User;
+    error?: Error;
+}
+
+// Good - the discriminant makes illegal states unrepresentable
+type Request =
+    | { status: 'loading' }
+    | { status: 'success'; data: User }
+    | { status: 'error'; error: Error };
+
+function render(req: Request): string {
+    if (req.status === 'loading') return 'Loading...';
+    if (req.status === 'error') return req.error.message; // narrowed
+    return req.data.name; // narrowed
+}
+```
+
+#### TY6: `type` for Unions and Aliases, `interface` for Object Shapes
+
+Pick the one that fits and stay consistent.
+
+```ts
+// Good - interface for an extensible object shape
+interface User {
+    id: string;
+    name: string;
+}
+
+interface Admin extends User {
+    permissions: string[];
+}
+
+// Good - type for unions, intersections, primitives, mapped types
+type Status = 'active' | 'inactive';
+type UserId = string & { readonly __brand: 'UserId' };
+type Partial<T> = { [K in keyof T]?: T[K] };
+```
+
+Do not alias a primitive without branding it (TY11). `type Age = number` buys nothing.
+
+#### TY7: String Literal Unions Over `enum`
+
+Enums emit runtime code, have surprising assignability, and do not tree-shake well. A union plus a `const` object covers every real use case.
+
+```ts
+// Bad
+enum Role {
+    Admin = 'admin',
+    Member = 'member',
+    Guest = 'guest',
+}
+
+// Good
+type Role = 'admin' | 'member' | 'guest';
+
+const ROLES = ['admin', 'member', 'guest'] as const satisfies readonly Role[];
+```
+
+#### TY8: Use `satisfies` to Validate Without Widening
+
+`satisfies` checks a value against a type but preserves the narrow, literal type for downstream inference.
+
+```ts
+// Bad - annotation widens the value
+const config: Record<string, string | number> = {
+    host: 'localhost',
+    port: 5432,
+};
+config.port.toFixed(2); // error: string | number
+
+// Bad - no validation, typo goes unnoticed
+const routes = {
+    home: '/',
+    profle: '/profile', // typo
+};
+
+// Good - validated and narrow
+const config = {
+    host: 'localhost',
+    port: 5432,
+} satisfies Record<string, string | number>;
+config.port.toFixed(2); // ok: number
+
+type Route = 'home' | 'profile';
+const routes = {
+    home: '/',
+    profile: '/profile',
+} satisfies Record<Route, string>;
+```
+
+#### TY9: Prefer `readonly` and Immutability at Boundaries
+
+Mark what callers must not mutate. This is documentation the compiler enforces, and it is how F2 (no output arguments) gets enforced at the type level.
+
+```ts
+// Bad - caller can mutate your internals
+export function tags(): string[] {
+    return this.tags;
+}
+
+// Good
+export function tags(): readonly string[] {
+    return this.tags;
+}
+
+// Good - readonly fields on value types
+interface Point {
+    readonly x: number;
+    readonly y: number;
+}
+```
+
+Use `ReadonlyArray<T>`, `ReadonlyMap`, `ReadonlySet`, and `readonly` modifiers freely on exported surfaces.
+
+#### TY10: Use Built-in Utility Types
+
+Do not redeclare what the standard library already provides. This is G5 (DRY) at the type level.
+
+```ts
+// Bad - hand-rolled
+interface UserUpdate {
+    name?: string;
+    email?: string;
+    age?: number;
+}
+
+// Good - derived from the source of truth
+type UserUpdate = Partial<User>;
+
+// Other common utilities worth knowing:
+type UserSummary = Pick<User, 'id' | 'name'>;
+type UserWithoutId = Omit<User, 'id'>;
+type UserMap = Record<string, User>;
+type UserKeys = keyof User;
+type MaybeUser = User | null;
+type RequiredUser = Required<User>;
+```
+
+#### TY11: Brand Domain Primitives When They Are Not Interchangeable
+
+If two `string`s mean different things, the type system should know.
+
+```ts
+// Bad - easy to pass the wrong id
+function transfer(from: string, to: string, amount: number): void {}
+transfer(accountId, userId, 100); // compiles, but is a bug
+
+// Good - branded types prevent the mix-up
+type AccountId = string & { readonly __brand: 'AccountId' };
+type UserId = string & { readonly __brand: 'UserId' };
+
+function transfer(from: AccountId, to: AccountId, amount: number): void {}
+transfer(accountId, userId, 100); // compile error
+```
+
+Reserve branding for values with real domain meaning (IDs, currencies, units). Do not brand every string.
+
+#### TY12: No Redundant Generics
+
+Generics are only useful when they connect two positions (input to output, or one argument to another). A generic used once is just `unknown`.
+
+```ts
+// Bad - <T> adds nothing
+function log<T>(value: T): void {
+    console.log(value);
+}
+
+// Good
+function log(value: unknown): void {
+    console.log(value);
+}
+
+// Good - generic connects input to output
+function first<T>(items: readonly T[]): T | undefined {
+    return items[0];
+}
+```
+
+#### TY13: Avoid `Function`, `Object`, `{}`, and Boxed Primitives
+
+These types are either too wide or wrong. Use a precise alternative.
+
+```ts
+// Bad
+const fn: Function = () => 1;
+const obj: Object = { a: 1 };
+const anything: {} = 'hello'; // {} means "anything except null/undefined"
+const n: Number = 5; // boxed primitive
+
+// Good
+const fn: () => number = () => 1;
+const obj: Record<string, unknown> = { a: 1 };
+const anything: unknown = 'hello';
+const n: number = 5;
+```
+
 ---
 
 ### General Clean Code Principles
@@ -369,7 +734,7 @@ If it's not called, delete it. No "just in case" code. Git preserves history.
 
 **G5: DRY (Don't Repeat Yourself)**
 
-Every piece of knowledge has one authoritative representation.
+Every piece of knowledge has one authoritative representation. At the type level, this means deriving related types from one source with utility types (TY10) instead of re-declaring them.
 
 ```ts
 // Bad - duplication
@@ -387,7 +752,7 @@ export function calculateTotal(subtotal: number, state: State): number {
 
 **G16: No Obscured Intent**
 
-Don't be clever. Be clear.
+Don't be clever. Be clear. This applies to types too: a hand-rolled type guard or an `as` cast (TY3) obscures intent by hiding what the compiler could state directly.
 
 ```ts
 // Bad - what does this do?
@@ -398,6 +763,8 @@ return packCoordinates(x, y);
 ```
 
 **G23: Prefer Polymorphism to If/Else**
+
+At the type level, this is TY5 (discriminated unions): the discriminant becomes the dispatch and illegal combinations stop compiling.
 
 ```ts
 // Bad - will grow forever
@@ -478,7 +845,7 @@ if (elapsedTimeSeconds > SECONDS_PER_DAY) {
 
 **G30: Functions Should Do One Thing**
 
-If you can extract another function, your function does more than one thing.
+If you can extract another function, your function does more than one thing. (But see F5: do not extract a helper that will be used only once.)
 
 **G36: Law of Demeter (Avoid Train Wrecks)**
 
@@ -494,13 +861,18 @@ const outputDir = context.getScratchDir();
 
 When reviewing AI-generated code, verify:
 
-- [ ] No duplication (G5)
-- [ ] Clear intent, no magic numbers (G16, G25)
-- [ ] Polymorphism over conditionals (G23)
+- [ ] No duplication, including at the type level (G5, TY10)
+- [ ] Clear intent, no magic numbers, no hidden casts (G16, G25, TY3)
+- [ ] Polymorphism over conditionals, discriminated unions over optional bags (G23, TY5)
 - [ ] Functions do one thing (G30)
+- [ ] No single-use helpers, wrappers, or type guards (F5)
 - [ ] No Law of Demeter violations (G36)
 - [ ] Boundary conditions handled (G3)
 - [ ] Dead code removed (G9)
+- [ ] No `any`, no `!`, no unjustified `as` (TY1, TY3, TY4)
+- [ ] No `enum`, no `Function`/`Object`/`{}` (TY7, TY13)
+- [ ] `readonly` applied where mutation would be a bug (TY9, F2)
+- [ ] Exported boundaries annotated; internals inferred (TY2)
 
 ---
 
@@ -558,6 +930,8 @@ const journal = JSON.parse(await readFile(join(dir, 'journal.json'), 'utf8')) as
 const path = join(dir, 'journal.json');
 const journal = JSON.parse(await readFile(path, 'utf8')) as Journal;
 ```
+
+Note: the `as Journal` in the "Good" example above is a pragmatic serialization boundary cast (TY3). In production code, prefer validating the parsed `unknown` against a schema before trusting it.
 
 #### N4: Avoid Unnecessary Destructuring
 
