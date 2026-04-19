@@ -6,7 +6,7 @@ import { captureStderr, cleanupRoots, createRoot, writeConfig } from './support.
 
 const usage = 'Usage: maw-cli dev <workflow> [langgraph args...]';
 
-const seed = async (root: string, name = 'docs-agent'): Promise<void> => {
+const seed = async (root: string, name = 'coding'): Promise<void> => {
     const dir = join(root, '.maw/graphs', name);
 
     await mkdir(dir, { recursive: true });
@@ -51,7 +51,7 @@ describe('runDev', () => {
         const stderr = captureStderr();
 
         await seed(root);
-        await expect(runDev(['docs-agent'], root, launch)).resolves.toBe(1);
+        await expect(runDev(['coding'], root, launch)).resolves.toBe(1);
 
         expect(launch).not.toHaveBeenCalled();
         expect(stderr.output.join('')).toContain('Config file not found');
@@ -69,7 +69,7 @@ describe('runDev', () => {
         const launch = vi.fn(async () => 0);
         const stderr = captureStderr();
 
-        await expect(runDev(['docs-agent'], root, launch)).resolves.toBe(1);
+        await expect(runDev(['coding'], root, launch)).resolves.toBe(1);
 
         expect(launch).not.toHaveBeenCalled();
         expect(stderr.output.join('')).toContain('Invalid config: missing openviking.port');
@@ -82,16 +82,16 @@ describe('runDev', () => {
         const launch = vi.fn(async () => 0);
         const stderr = captureStderr();
 
-        await expect(runDev(['docs-agent'], root, launch)).resolves.toBe(1);
+        await expect(runDev(['coding'], root, launch)).resolves.toBe(1);
 
         expect(launch).not.toHaveBeenCalled();
-        expect(stderr.output.join('')).toContain(`Workflow directory not found: ${join(root, '.maw/graphs/docs-agent')}`);
+        expect(stderr.output.join('')).toContain(`Workflow directory not found: ${join(root, '.maw/graphs/coding')}`);
         stderr.restore();
     });
 
     it('returns 1 when workflow-local files are missing', async () => {
         const root = await createRoot('maw-cli-dev-files-');
-        const dir = join(root, '.maw/graphs/docs-agent');
+        const dir = join(root, '.maw/graphs/coding');
 
         await writeConfig(root);
         await mkdir(dir, { recursive: true });
@@ -99,7 +99,7 @@ describe('runDev', () => {
         const launch = vi.fn(async () => 0);
         const stderr = captureStderr();
 
-        await expect(runDev(['docs-agent'], root, launch)).resolves.toBe(1);
+        await expect(runDev(['coding'], root, launch)).resolves.toBe(1);
 
         expect(launch).not.toHaveBeenCalled();
         expect(stderr.output.join('')).toContain(`Workflow file not found: ${join(dir, 'config.json')}`);
@@ -112,8 +112,8 @@ describe('runDev', () => {
         await seed(root);
         const launch = vi.fn(async () => 0);
 
-        await expect(runDev(['docs-agent', '--port', '2024'], root, launch)).resolves.toBe(0);
+        await expect(runDev(['coding', '--port', '2024'], root, launch)).resolves.toBe(0);
 
-        expect(launch).toHaveBeenCalledWith('dev', ['--config', '.maw/graphs/docs-agent', '--port', '2024']);
+        expect(launch).toHaveBeenCalledWith('dev', ['--config', '.maw/graphs/coding', '--port', '2024']);
     });
 });

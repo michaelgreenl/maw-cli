@@ -1,5 +1,5 @@
 {
-    "name": "docs-agent-alt",
+    "name": "coding-alt",
     "type": "module",
     "exports": {
         "./package.json": "./package.json",

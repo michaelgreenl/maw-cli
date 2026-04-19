@@ -1,5 +1,5 @@
 {
-    "name": "docs-agent",
+    "name": "coding",
     "type": "module",
     "exports": {
         "./package.json": "./package.json",

@@ -23,13 +23,13 @@ describe('maw-cli init', () => {
     });
 
     it('loads every workflow package sorted by workflow name', async () => {
-        const root = await createProject('maw-cli-workflows-', ['docs-agent', 'code-agent']);
+        const root = await createProject('maw-cli-workflows-', ['coding', 'code-agent']);
 
         const workflows = await loadWorkflows(root);
 
         expect(workflows.map((workflow) => workflow.scaffold)).toEqual([
             { packageName: 'code-agent', workflow: 'code-agent' },
-            { packageName: 'docs-agent', workflow: 'docs-agent' },
+            { packageName: 'coding', workflow: 'coding' },
         ]);
         await expect(Promise.resolve(workflows[0].createScaffoldFiles())).resolves.toEqual({
             'config.json': JSON.stringify({ agents: { coder: { skills: ['general-coding'] } } }, null, 2),
@@ -46,9 +46,9 @@ describe('maw-cli init', () => {
     });
 
     it('fails when two packages claim the same workflow name', async () => {
-        const root = await createProject('maw-cli-workflows-dup-', ['docs-agent', 'docs-agent-alt']);
+        const root = await createProject('maw-cli-workflows-dup-', ['coding', 'coding-alt']);
 
-        await expect(loadWorkflows(root)).rejects.toThrow('Duplicate workflow name: docs-agent');
+        await expect(loadWorkflows(root)).rejects.toThrow('Duplicate workflow name: coding');
     });
 
     it('bootstraps project-owned scaffold files and warns when no workflows are installed', async () => {
@@ -107,31 +107,31 @@ describe('maw-cli init', () => {
     });
 
     it('creates workflow-local scaffold files for a single workflow', async () => {
-        const root = await createProject('maw-cli-init-one-', ['docs-agent']);
+        const root = await createProject('maw-cli-init-one-', ['coding']);
         const stdout = captureStdout();
 
         await expect(runInit([], root)).resolves.toBe(0);
 
-        expect(await readFile(join(root, '.maw/graphs/docs-agent/config.json'), 'utf8')).toContain('general-coding');
-        expect(await readFile(join(root, '.maw/graphs/docs-agent/graph.ts'), 'utf8')).toContain(
-            "import { createGraph } from 'docs-agent';",
+        expect(await readFile(join(root, '.maw/graphs/coding/config.json'), 'utf8')).toContain('general-coding');
+        expect(await readFile(join(root, '.maw/graphs/coding/graph.ts'), 'utf8')).toContain(
+            "import { createGraph } from 'coding';",
         );
-        expect(await readJson(join(root, '.maw/graphs/docs-agent/langgraph.json'))).toEqual({
+        expect(await readJson(join(root, '.maw/graphs/coding/langgraph.json'))).toEqual({
             node_version: '20',
             graphs: {
-                'docs-agent': './graph.ts:graph',
+                coding: './graph.ts:graph',
             },
             env: '../../../.env',
         });
         expect(await exists(join(root, '.maw/config.json'))).toBe(false);
         expect(await exists(join(root, '.maw/graph.ts'))).toBe(false);
         expect(await exists(join(root, 'langgraph.json'))).toBe(false);
-        expect(stdout.output.join('')).toContain('docs-agent');
+        expect(stdout.output.join('')).toContain('coding');
         stdout.restore();
     });
 
     it('creates workflow-local scaffold files for every discovered workflow', async () => {
-        const root = await createProject('maw-cli-init-many-', ['docs-agent', 'code-agent']);
+        const root = await createProject('maw-cli-init-many-', ['coding', 'code-agent']);
         const stdout = captureStdout();
 
         await expect(runInit([], root)).resolves.toBe(0);
@@ -139,25 +139,25 @@ describe('maw-cli init', () => {
         expect(await readFile(join(root, '.maw/graphs/code-agent/graph.ts'), 'utf8')).toContain(
             "import { createGraph } from 'code-agent';",
         );
-        expect(await readFile(join(root, '.maw/graphs/docs-agent/graph.ts'), 'utf8')).toContain(
-            "import { createGraph } from 'docs-agent';",
+        expect(await readFile(join(root, '.maw/graphs/coding/graph.ts'), 'utf8')).toContain(
+            "import { createGraph } from 'coding';",
         );
         expect(await exists(join(root, '.maw/graphs/code-agent/langgraph.json'))).toBe(true);
-        expect(await exists(join(root, '.maw/graphs/docs-agent/langgraph.json'))).toBe(true);
+        expect(await exists(join(root, '.maw/graphs/coding/langgraph.json'))).toBe(true);
         expect(stdout.output.join('')).toContain('code-agent');
-        expect(stdout.output.join('')).toContain('docs-agent');
+        expect(stdout.output.join('')).toContain('coding');
         stdout.restore();
     });
 
     it('preserves project-owned and workflow-local files on rerun and appends gitignore once', async () => {
-        const root = await createProject('maw-cli-init-preserve-', ['docs-agent']);
+        const root = await createProject('maw-cli-init-preserve-', ['coding']);
 
-        await mkdir(join(root, '.maw/graphs/docs-agent'), { recursive: true });
+        await mkdir(join(root, '.maw/graphs/coding'), { recursive: true });
         await writeFile(join(root, 'maw.json'), '{\n  "workspace": "custom"\n}\n');
         await writeFile(join(root, '.maw/ov.conf'), '{\n  "custom": true\n}\n');
-        await writeFile(join(root, '.maw/graphs/docs-agent/graph.ts'), '// custom graph\n');
-        await writeFile(join(root, '.maw/graphs/docs-agent/config.json'), '{\n  "custom": true\n}\n');
-        await writeFile(join(root, '.maw/graphs/docs-agent/langgraph.json'), '{\n  "workflow": "custom"\n}\n');
+        await writeFile(join(root, '.maw/graphs/coding/graph.ts'), '// custom graph\n');
+        await writeFile(join(root, '.maw/graphs/coding/config.json'), '{\n  "custom": true\n}\n');
+        await writeFile(join(root, '.maw/graphs/coding/langgraph.json'), '{\n  "workflow": "custom"\n}\n');
         await writeFile(join(root, '.gitignore'), 'node_modules/\n');
 
         await expect(runInit([], root)).resolves.toBe(0);
@@ -165,11 +165,11 @@ describe('maw-cli init', () => {
 
         expect(await readFile(join(root, 'maw.json'), 'utf8')).toBe('{\n  "workspace": "custom"\n}\n');
         expect(await readFile(join(root, '.maw/ov.conf'), 'utf8')).toBe('{\n  "custom": true\n}\n');
-        expect(await readFile(join(root, '.maw/graphs/docs-agent/graph.ts'), 'utf8')).toBe('// custom graph\n');
-        expect(await readFile(join(root, '.maw/graphs/docs-agent/config.json'), 'utf8')).toBe(
+        expect(await readFile(join(root, '.maw/graphs/coding/graph.ts'), 'utf8')).toBe('// custom graph\n');
+        expect(await readFile(join(root, '.maw/graphs/coding/config.json'), 'utf8')).toBe(
             '{\n  "custom": true\n}\n',
         );
-        expect(await readFile(join(root, '.maw/graphs/docs-agent/langgraph.json'), 'utf8')).toBe(
+        expect(await readFile(join(root, '.maw/graphs/coding/langgraph.json'), 'utf8')).toBe(
             '{\n  "workflow": "custom"\n}\n',
         );
         expect((await stat(join(root, '.maw/templates'))).isDirectory()).toBe(true);

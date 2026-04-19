@@ -10,12 +10,12 @@ describe('langgraph helpers', () => {
     });
 
     it('creates workflow-local langgraph config without root dependencies', () => {
-        const cfg = createWorkflowLanggraphJson('docs-agent');
+        const cfg = createWorkflowLanggraphJson('coding');
 
         expect(cfg).toEqual({
             node_version: '20',
             graphs: {
-                'docs-agent': './graph.ts:graph',
+                coding: './graph.ts:graph',
             },
             env: '../../../.env',
         });
@@ -24,7 +24,7 @@ describe('langgraph helpers', () => {
 
     it('validates required workflow-local files before launch', async () => {
         const root = await createRoot('maw-cli-langgraph-');
-        const dir = join(root, '.maw/graphs/docs-agent');
+        const dir = join(root, '.maw/graphs/coding');
 
         await mkdir(dir, { recursive: true });
         await writeFile(join(dir, 'graph.ts'), 'export const graph = {}\n');

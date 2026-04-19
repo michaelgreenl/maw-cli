@@ -8,7 +8,7 @@ const roots: string[] = [];
 const testDir = dirname(fileURLToPath(import.meta.url));
 const fixtureDir = join(testDir, 'fixtures', 'workflows');
 
-export type WorkflowFixture = 'docs-agent' | 'code-agent' | 'docs-agent-alt';
+export type WorkflowFixture = 'coding' | 'code-agent' | 'coding-alt';
 
 export const createRoot = async (prefix: string): Promise<string> => {
     const root = await mkdtemp(join(tmpdir(), prefix));

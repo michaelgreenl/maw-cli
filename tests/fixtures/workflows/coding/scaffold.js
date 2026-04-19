@@ -1,9 +1,9 @@
 export const scaffold = {
-    packageName: 'docs-agent',
-    workflow: 'docs-agent',
+    packageName: 'coding',
+    workflow: 'coding',
 };
 
 export const createScaffoldFiles = () => ({
     'config.json': JSON.stringify({ agents: { planner: { skills: ['general-coding'] } } }, null, 2),
-    'graph.ts': "import { createGraph } from 'docs-agent';\n\nexport const graph = createGraph();\n",
+    'graph.ts': "import { createGraph } from 'coding';\n\nexport const graph = createGraph();\n",
 });
